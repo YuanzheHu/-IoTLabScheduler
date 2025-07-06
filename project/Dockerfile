@@ -7,6 +7,7 @@ WORKDIR /usr/src/app
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV TZ=Europe/London
 
 # install dependencies
 RUN pip install --upgrade pip
@@ -15,3 +16,6 @@ RUN pip install -r requirements.txt
 
 # copy project
 COPY . .
+
+# create logs directory
+RUN mkdir -p logs
