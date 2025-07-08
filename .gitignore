@@ -152,3 +152,10 @@ logs/
 *.log
 .env.local
 .env.production
+
+# CSV files
+*.csv
+
+# PCAP files
+*.pcap
+*.pcapng
