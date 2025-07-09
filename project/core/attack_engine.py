@@ -68,9 +68,9 @@ class AttackEngine:
                 }
                 logger.info(f"✅ Attack started successfully (PID: {self.attack_process.pid})")
                 
-                # Start a background task to monitor and auto-cleanup
-                asyncio.create_task(self._monitor_attack(duration))
-                
+                # 等待进程结束（阻塞 duration 秒）
+                await self.attack_process.wait()
+                logger.info("✅ Attack process finished")
                 return True
             else:
                 logger.error("❌ Failed to start attack process")
@@ -85,31 +85,31 @@ class AttackEngine:
         
         attack_commands = {
             'syn_flood': [
-                'sudo', 'hping3', '-S', '-I', interface, 
+                'hping3', '-S', '-I', interface, 
                 '-p', '55443', '-i', 'u1000', '--flood', target_ip
             ],
             'udp_flood': [
-                'sudo', 'hping3', '--udp', '-I', interface,
+                'hping3', '--udp', '-I', interface,
                 '-p', '55443', '-i', 'u1000', '--flood', target_ip
             ],
             'icmp_flood': [
-                'sudo', 'hping3', '--icmp', '--flood', target_ip
+                'hping3', '--icmp', '--flood', target_ip
             ],
             'tcp_flood': [
-                'sudo', 'hping3', '-A', '-I', interface,
+                'hping3', '-A', '-I', interface,
                 '-p', '55443', '-i', 'u1000', '--flood', target_ip
             ],
             'ip_frag_flood': [
-                'sudo', 'hping3', '-f', '-I', interface,
+                'hping3', '-f', '-I', interface,
                 '-p', '55443', '--flood', target_ip
             ],
             'port_scan': [
                 'bash', '-c', 
-                f'while true; do sudo nmap -sS -p- {target_ip}; sleep 1; done'
+                f'while true; do nmap -sS -p- {target_ip}; sleep 1; done'
             ],
             'os_fingerprint': [
                 'timeout', '60s', 'bash', '-c',
-                f'while true; do sudo nmap -O --osscan-guess -p- {target_ip}; done'
+                f'while true; do nmap -O --osscan-guess -p- {target_ip}; done'
             ]
         }
         
@@ -272,3 +272,4 @@ if __name__ == '__main__':
     
     # Run test
     asyncio.run(test_attack_engine())
+ 
