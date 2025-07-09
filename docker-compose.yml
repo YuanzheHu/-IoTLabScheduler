@@ -2,46 +2,55 @@ version: '3.8'
 
 services:
 
+  # FastAPI web application service
   web:
     build: ./project
     ports:
-      - 8004:8000
-    command: uvicorn main:app --host 0.0.0.0 --reload
+      - 8004:8000  # Expose FastAPI on host port 8004
+    command: uvicorn main:app --host 0.0.0.0 --reload  # Start FastAPI with auto-reload
     volumes:
-      - ./project:/usr/src/app
+      - ./project:/usr/src/app  # Mount project source code for live reload
+      - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL for task queue
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
     depends_on:
-      - redis
+      - redis  # Ensure Redis is started before web
 
+  # Celery worker service for background task processing
   worker:
     build: ./project
-    command: celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log
+    command: celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log  # Start Celery worker with logging
     volumes:
-      - ./project:/usr/src/app
+      - ./project:/usr/src/app  # Mount project source code
+      - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - TZ=Europe/London
+      - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
+      - TZ=Europe/London  # Set timezone for logs and tasks
     depends_on:
-      - web
-      - redis
+      - web    # Wait for web service to be ready
+      - redis  # Wait for Redis to be ready
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
 
+  # Flower dashboard for monitoring Celery tasks
   dashboard:
     build: ./project
-    command: celery --broker=redis://redis:6379/0 flower --port=5555
+    command: celery --broker=redis://redis:6379/0 flower --port=5555  # Start Flower on port 5555
     ports:
-      - 5556:5555
+      - 5556:5555  # Expose Flower dashboard on host port 5556
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
     depends_on:
-      - web
-      - redis
-      - worker
+      - web     # Wait for web service
+      - redis   # Wait for Redis
+      - worker  # Wait for worker
 
+  # Redis service for Celery broker and backend
   redis:
-    image: redis:7
+    image: redis:7  # Use official Redis image
     ports:
-      - 6379:6379
+      - 6379:6379  # Expose Redis on default port

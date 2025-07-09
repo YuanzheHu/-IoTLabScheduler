@@ -13,9 +13,12 @@ ENV TZ=Europe/London
 RUN pip install --upgrade pip
 COPY ./requirements.txt .
 RUN pip install -r requirements.txt
+# 安装 hping3
+RUN apt-get update && apt-get install -y hping3 tcpdump
 
 # copy project
 COPY . .
 
 # create logs directory
 RUN mkdir -p logs
+RUN mkdir -p data
