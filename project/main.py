@@ -4,24 +4,26 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from worker import create_task, celery
 from celery.result import AsyncResult
+from api.devices import router as devices_router
+from api.experiments import router as experiments_router
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-
+# 注册设备和实验API路由
+app.include_router(devices_router)
+app.include_router(experiments_router)
 
 @app.get("/")
 def home(request: Request):
     return templates.TemplateResponse("home.html", context={"request": request})
-
 
 @app.post("/tasks", status_code=201)
 def run_task(payload = Body(...)):
     task_type = payload["type"]
     task = create_task.delay(int(task_type))
     return JSONResponse({"task_id": task.id})
-
 
 @app.get("/tasks/{task_id}")
 def get_status(task_id):
