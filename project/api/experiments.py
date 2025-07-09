@@ -51,8 +51,8 @@ def create_experiment(exp: ExperimentCreate, db: Session = Depends(get_db)):
         experiment_id=db_exp.id,
         attack_type=exp.attack_type,
         target_ip=exp.target_ip,
-        duration=60,  # Can be customized from exp
-        interface="eth0"  # Can be customized from exp
+        duration=exp.duration_sec or 60,
+        interface="eth0"
     )
 
     return db_exp

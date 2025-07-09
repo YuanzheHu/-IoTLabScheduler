@@ -1,8 +1,12 @@
 import json
-import time
+import requests
+import pytest
 from worker import create_task
 from unittest.mock import patch
+from fastapi.testclient import TestClient
+from main import app
 
+client = TestClient(app)
 
 def test_home(test_app):
     response = test_app.get("/")
@@ -25,7 +29,6 @@ def test_mock_task(mock_run):
     assert create_task.run(3)
     assert create_task.run.call_count == 3
     
-
 def test_task_status(test_app):
     response = test_app.post(
         "/tasks",

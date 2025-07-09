@@ -52,7 +52,7 @@ def create_task(task_type):
     time.sleep(int(task_type) * 10)
     uk_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     logger.info(f"[{uk_time}] Completed task with type: {task_type}")
-    return True
+    return True 
 
 @celery.task(name="run_attack_experiment")
 def run_attack_experiment(experiment_id, attack_type, target_ip, duration, interface):
@@ -88,7 +88,7 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, duration, inter
         exp.status = "running"
         db.commit()
 
-        # Step 2.5: 启动抓包
+        # Step 2.5: Start packet capture
         pcap_dir = "data/pcaps"
         os.makedirs(pcap_dir, exist_ok=True)
         pcap_path = os.path.join(pcap_dir, f"exp_{experiment_id}_{int(time.time())}.pcap")
@@ -108,10 +108,10 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, duration, inter
         )
         loop.close()
 
-        # Step 5.5: 停止抓包
+        # Step 5.5: Stop packet capture
         tcpdump.stop()
 
-        # Step 5.6: 保存 PCAP 文件信息到 captures 表
+        # Step 5.6: Save PCAP file information to the captures table
         file_size = os.path.getsize(pcap_path) if os.path.exists(pcap_path) else 0
         capture = Capture(
             file_name=os.path.basename(pcap_path),
