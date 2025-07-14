@@ -5,22 +5,24 @@ services:
   # FastAPI web application service
   web:
     build: ./project
-    ports:
-      - 8004:8000  # Expose FastAPI on host port 8004
-    command: uvicorn main:app --host 0.0.0.0 --reload  # Start FastAPI with auto-reload
+    network_mode: host  # Use host network mode to access physical network
+    command: sh -c "chmod -R 777 /usr/src/app/data && uvicorn main:app --host 0.0.0.0 --reload"  # Fix permissions then start FastAPI
     volumes:
       - ./project:/usr/src/app  # Mount project source code for live reload
       - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL for task queue
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
+      - CELERY_BROKER_URL=redis://localhost:6379/0  # Celery broker URL for task queue (localhost in host mode)
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/0  # Celery result backend
     depends_on:
       - redis  # Ensure Redis is started before web
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Allow access to host network
+    user: "0:0"
 
   # Celery worker service for background task processing
   worker:
     build: ./project
-    command: celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log  # Start Celery worker with logging
+    command: sh -c "chmod -R 777 /usr/src/app/data && celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log"  # Fix permissions then start Celery worker
     volumes:
       - ./project:/usr/src/app  # Mount project source code
       - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
@@ -34,13 +36,16 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Allow access to host network
+    user: "0:0"
 
   # Flower dashboard for monitoring Celery tasks
   dashboard:
     build: ./project
-    command: celery --broker=redis://redis:6379/0 flower --port=5555  # Start Flower on port 5555
     ports:
       - 5556:5555  # Expose Flower dashboard on host port 5556
+    command: celery --broker=redis://redis:6379/0 flower --port=5555  # Start Flower on port 5555
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL
       - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
@@ -48,6 +53,8 @@ services:
       - web     # Wait for web service
       - redis   # Wait for Redis
       - worker  # Wait for worker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Allow access to host network
 
   # Redis service for Celery broker and backend
   redis:
