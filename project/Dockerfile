@@ -13,8 +13,8 @@ ENV TZ=Europe/London
 RUN pip install --upgrade pip
 COPY ./requirements.txt .
 RUN pip install -r requirements.txt
-# 安装 hping3
-RUN apt-get update && apt-get install -y hping3 tcpdump
+# 安装 hping3, tcpdump, nmap
+RUN apt-get update && apt-get install -y hping3 tcpdump nmap
 
 # copy project
 COPY . .
