@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, validator, root_validator
+import ipaddress
 from typing import Optional, List
 from datetime import datetime
 
@@ -102,6 +103,7 @@ class ExperimentBase(BaseModel):
         name (str): Name of the experiment.
         attack_type (Optional[str]): Type of attack (e.g., SYN, UDP, ICMP).
         target_ip (str): Target IP address for the experiment.
+        port (Optional[int]): Target port for the attack (default: 55443).
         status (Optional[str]): Current status of the experiment.
         start_time (Optional[datetime]): Start time of the experiment.
         end_time (Optional[datetime]): End time of the experiment.
@@ -110,14 +112,29 @@ class ExperimentBase(BaseModel):
         duration_sec (Optional[int]): Duration of the experiment in seconds.
     """
     name: str
-    attack_type: Optional[str] = None
+    attack_type: str
     target_ip: str
+    port: Optional[int] = 55443
     status: Optional[str] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     result: Optional[str] = None
     capture_id: Optional[int] = None
-    duration_sec: Optional[int] = 60
+    duration_sec: int
+
+    @validator('target_ip')
+    def validate_target_ip(cls, v):
+        try:
+            ipaddress.IPv4Address(v)
+        except Exception:
+            raise ValueError('target_ip must be a valid IPv4 address')
+        return v
+
+    @validator('duration_sec')
+    def validate_duration_sec(cls, v):
+        if v is None or v <= 0:
+            raise ValueError('duration_sec must be a positive integer')
+        return v
 
 class ExperimentCreate(ExperimentBase):
     """

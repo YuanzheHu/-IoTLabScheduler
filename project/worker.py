@@ -54,8 +54,51 @@ def create_task(task_type):
     logger.info(f"[{uk_time}] Completed task with type: {task_type}")
     return True 
 
+@celery.task(name="stop_attack_experiment")
+def stop_attack_experiment(experiment_id):
+    """
+    Celery task to stop a running attack experiment.
+
+    Args:
+        experiment_id (int): ID of the experiment to stop.
+
+    Returns:
+        bool: True if experiment stopped successfully, False otherwise.
+    """
+    logger = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        # Fetch the experiment record from the database by ID
+        exp = db.query(Experiment).get(experiment_id)
+        if not exp:
+            logger.error(f"Experiment {experiment_id} not found.")
+            return False
+
+        # Initialize the attack engine and stop the attack
+        engine = AttackEngine()
+        
+        # Create a new asyncio event loop for the attack (Celery worker context)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Stop the attack asynchronously
+        result = loop.run_until_complete(engine.stop_attack())
+        loop.close()
+
+        if result:
+            logger.info(f"Experiment {experiment_id} stopped successfully")
+        else:
+            logger.warning(f"Experiment {experiment_id} was not running or failed to stop")
+        
+        return result
+    except Exception as e:
+        logger.error(f"Failed to stop experiment {experiment_id}: {e}")
+        return False
+    finally:
+        db.close()
+
 @celery.task(name="run_attack_experiment")
-def run_attack_experiment(experiment_id, attack_type, target_ip, duration, interface):
+def run_attack_experiment(experiment_id, attack_type, target_ip, port, duration, interface):
     """
     Celery task to execute a network attack experiment asynchronously.
 
@@ -68,6 +111,7 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, duration, inter
         experiment_id (int): ID of the experiment in the database.
         attack_type (str): Type of attack to perform (e.g., 'SYN', 'UDP', 'ICMP').
         target_ip (str): Target IP address for the attack.
+        port (int): Target port for the attack.
         duration (int): Duration of the attack in seconds.
         interface (str): Network interface to use.
 
@@ -89,9 +133,13 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, duration, inter
         db.commit()
 
         # Step 2.5: Start packet capture
-        pcap_dir = "data/pcaps"
+        # Archive PCAPs by target_ip
+        safe_ip = target_ip.replace(':', '_').replace('.', '_')
+        pcap_dir = os.path.join("data/pcaps", safe_ip)
         os.makedirs(pcap_dir, exist_ok=True)
-        pcap_path = os.path.join(pcap_dir, f"exp_{experiment_id}_{int(time.time())}.pcap")
+        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+        pcap_filename = f"exp_{experiment_id}_{safe_ip}_{timestamp}.pcap"
+        pcap_path = os.path.join(pcap_dir, pcap_filename)
         tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface)
         tcpdump.start()
 
@@ -104,7 +152,7 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, duration, inter
 
         # Step 5: Run the attack asynchronously and wait for result
         result = loop.run_until_complete(
-            engine.start_attack(attack_type, target_ip, interface, duration)
+            engine.start_attack(attack_type, target_ip, interface, duration, port)
         )
         loop.close()
 
@@ -114,11 +162,11 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, duration, inter
         # Step 5.6: Save PCAP file information to the captures table
         file_size = os.path.getsize(pcap_path) if os.path.exists(pcap_path) else 0
         capture = Capture(
-            file_name=os.path.basename(pcap_path),
+            file_name=pcap_filename,
             file_path=pcap_path,
             experiment_id=experiment_id,
             file_size=file_size,
-            description=f"PCAP for experiment {experiment_id}"
+            description=f"PCAP for experiment {experiment_id} (target_ip={target_ip})"
         )
         db.add(capture)
         db.commit()

