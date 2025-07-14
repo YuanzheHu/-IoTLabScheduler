@@ -93,9 +93,9 @@ if __name__ == '__main__':
         # Check if file was created
         if os.path.exists(test_file):
             file_size = os.path.getsize(test_file)
-            print(f"✅ Test successful! Capture file created: {test_file} ({file_size} bytes)")
+            print(f"Test successful! Capture file created: {test_file} ({file_size} bytes)")
         else:
-            print("❌ Test failed: Capture file not created")
+            print("Test failed: Capture file not created")
             
     except Exception as e:
-        print(f"❌ Test failed with error: {e}")
+        print(f"Test failed with error: {e}")

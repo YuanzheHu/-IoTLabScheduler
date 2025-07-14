@@ -23,23 +23,65 @@ class DeviceDiscovery:
 
     def discover(self, subnet: str) -> List[Dict]:
         """
-        Use nmap -sn to scan the subnet and return a list of active hosts (ip, mac).
+        Use nmap -sn -PR to scan the subnet and return a list of active hosts (ip, mac).
         """
         print(f"Scanning subnet {subnet} with nmap...")
-        result = subprocess.run(
-            ['nmap', '-sn', subnet], capture_output=True, text=True
-        )
+        
+        # Use ARP scanning to get MAC addresses
+        try:
+            result = subprocess.run(
+                ['sudo', 'nmap', '-sn', '-PR', subnet], 
+                capture_output=True, text=True, timeout=120
+            )
+        except subprocess.TimeoutExpired:
+            print("Nmap scan timed out...")
+            return []
+        except FileNotFoundError:
+            print("nmap not found, trying without sudo...")
+            try:
+                result = subprocess.run(
+                    ['nmap', '-sn', '-PR', subnet], 
+                    capture_output=True, text=True, timeout=120
+                )
+            except subprocess.TimeoutExpired:
+                print("Nmap scan timed out...")
+                return []
+        
         hosts = []
         current_ip = None
+        current_mac = None
+        
+        print(f"Nmap output:\n{result.stdout}")
+        
         for line in result.stdout.splitlines():
             if line.startswith('Nmap scan report for'):
+                # If we have a previous IP, add it to hosts
+                if current_ip:
+                    hosts.append({
+                        'IP': current_ip, 
+                        'MAC': current_mac if current_mac else 'Unknown'
+                    })
+                
                 current_ip = line.split()[-1]
+                current_mac = None
             elif 'MAC Address:' in line and current_ip:
                 match = re.search(r'([0-9A-Fa-f:]{17})', line)
                 if match:
-                    mac = match.group(1).lower()
-                    hosts.append({'IP': current_ip, 'MAC': mac})
-                current_ip = None
+                    current_mac = match.group(1).lower()
+            elif 'MAC Address:' in line and current_ip:
+                # Alternative pattern for MAC address
+                match = re.search(r'([0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2}:[0-9A-Fa-f]{2})', line)
+                if match:
+                    current_mac = match.group(1).lower()
+        
+        # Add the last device if we have one
+        if current_ip:
+            hosts.append({
+                'IP': current_ip, 
+                'MAC': current_mac if current_mac else 'Unknown'
+            })
+        
+        print(f"Discovered {len(hosts)} hosts: {hosts}")
         return hosts
 
     @staticmethod
@@ -81,8 +123,12 @@ class DeviceDiscovery:
         mapping = self.clean_mapping
         identified = []
         for d in devices:
-            info = mapping.get(d['MAC'], None)
+            mac = d['MAC']
+            # Try to find device info in mapping
+            info = mapping.get(mac, None) if mac != 'Unknown' else None
+            
             if info:
+                # Device found in clean mapping
                 identified.append({
                     'IP': d['IP'],
                     'Category': info['Category'],
@@ -93,15 +139,18 @@ class DeviceDiscovery:
                     'Password': info['Password']
                 })
             else:
+                # Device not found in mapping or has unknown MAC
                 identified.append({
                     'IP': d['IP'],
                     'Category': 'Unknown',
-                    'Name': 'Unknown',
-                    'MAC': d['MAC'],
+                    'Name': f"Device {d['IP']}",
+                    'MAC': mac,
                     'Phone': 'Unknown',
                     'Email': 'Unknown',
                     'Password': 'Unknown'
                 })
+        
+        print(f"Identified {len(identified)} devices")
         return identified
 
 if __name__ == '__main__':
