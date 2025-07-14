@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime
 from db.base import SessionLocal
 from db.models import Experiment
 from .schemas import ExperimentCreate, ExperimentRead
-from worker import run_attack_experiment
+from worker import run_attack_experiment, stop_attack_experiment
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -36,11 +37,13 @@ def create_experiment(exp: ExperimentCreate, db: Session = Depends(get_db)):
         name=exp.name,
         attack_type=exp.attack_type,
         target_ip=exp.target_ip,
+        port=exp.port or 55443,
         status="pending",
         start_time=exp.start_time,
         end_time=exp.end_time,
         result=exp.result,
-        capture_id=exp.capture_id
+        capture_id=exp.capture_id,
+        duration_sec=exp.duration_sec
     )
     db.add(db_exp)
     db.commit()
@@ -51,6 +54,7 @@ def create_experiment(exp: ExperimentCreate, db: Session = Depends(get_db)):
         experiment_id=db_exp.id,
         attack_type=exp.attack_type,
         target_ip=exp.target_ip,
+        port=exp.port or 55443,
         duration=exp.duration_sec or 60,
         interface="eth0"
     )
@@ -90,49 +94,62 @@ def get_experiment(experiment_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Experiment not found")
     return exp
 
-@router.put("/{experiment_id}", response_model=ExperimentRead)
-def update_experiment(experiment_id: int, exp: ExperimentCreate, db: Session = Depends(get_db)):
+@router.post("/{experiment_id}/stop", response_model=ExperimentRead)
+def stop_experiment(experiment_id: int, db: Session = Depends(get_db)):
     """
-    Update an existing experiment entry.
+    Stop a running experiment.
 
     Args:
-        experiment_id (int): The ID of the experiment to update.
-        exp (ExperimentCreate): Updated experiment data.
+        experiment_id (int): The ID of the experiment to stop.
         db (Session): Database session.
 
     Returns:
         ExperimentRead: The updated experiment object.
 
     Raises:
-        HTTPException: If the experiment is not found.
+        HTTPException: If the experiment is not found or not running.
     """
-    db_exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not db_exp:
+    exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
-    for key, value in exp.dict().items():
-        setattr(db_exp, key, value)
+    
+    if exp.status != "running":
+        raise HTTPException(status_code=400, detail="Experiment is not running")
+    
+    # Update experiment status to stopped
+    exp.status = "stopped"
+    exp.end_time = datetime.utcnow()
+    exp.result = "Experiment stopped by user"
     db.commit()
-    db.refresh(db_exp)
-    return db_exp
+    db.refresh(exp)
+    
+    # Trigger Celery task to stop the attack
+    stop_attack_experiment.delay(experiment_id)
+    
+    return exp
 
-@router.delete("/{experiment_id}", response_model=dict)
-def delete_experiment(experiment_id: int, db: Session = Depends(get_db)):
+@router.get("/{experiment_id}/status")
+def get_experiment_status(experiment_id: int, db: Session = Depends(get_db)):
     """
-    Delete an experiment entry by its ID.
+    Get the current status of an experiment.
 
     Args:
-        experiment_id (int): The ID of the experiment to delete.
+        experiment_id (int): The ID of the experiment.
         db (Session): Database session.
 
     Returns:
-        dict: Confirmation of deletion.
-
-    Raises:
-        HTTPException: If the experiment is not found.
+        dict: Status information about the experiment.
     """
-    db_exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not db_exp:
+    exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
-    db.delete(db_exp)
-    db.commit()
-    return {"ok": True} 
+    
+    return {
+        "id": exp.id,
+        "name": exp.name,
+        "status": exp.status,
+        "start_time": exp.start_time,
+        "end_time": exp.end_time,
+        "result": exp.result
+    }
+
