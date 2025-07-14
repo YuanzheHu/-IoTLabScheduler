@@ -17,7 +17,8 @@ class Device(Base):
         os_info: Operating system information.
         status: Current status (e.g., online, offline).
         last_seen: Timestamp of last discovery.
-        extra_info: Additional information (JSON/text).
+        port: Port information (e.g., "55443", "8080").
+        email: Email for login.
     """
     __tablename__ = 'devices'
     id = Column(Integer, primary_key=True, index=True)
@@ -25,10 +26,13 @@ class Device(Base):
     mac_address = Column(String, index=True, nullable=False, unique=True)
     hostname = Column(String)
     device_type = Column(String)
-    os_info = Column(String)
     status = Column(String)
     last_seen = Column(DateTime, default=datetime.datetime.utcnow)
-    extra_info = Column(Text)
+    port = Column(String, nullable=True)  # 或 Column(JSON) 如果你想存为数组
+    os_info = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    password = Column(String, nullable=True)
 
 class Capture(Base):
     """
@@ -61,6 +65,7 @@ class Experiment(Base):
         name: Name of the experiment.
         attack_type: Type of attack (e.g., SYN, UDP, ICMP).
         target_ip: Target IP address for the attack.
+        port: Target port for the attack (default: 55443).
         status: Current status of the experiment (e.g., pending, running, completed).
         start_time: Timestamp when the experiment started.
         end_time: Timestamp when the experiment ended.
@@ -74,10 +79,12 @@ class Experiment(Base):
     name = Column(String, nullable=False)
     attack_type = Column(String)
     target_ip = Column(String, nullable=False)
+    port = Column(Integer, default=55443)
     status = Column(String)
     start_time = Column(DateTime, default=datetime.datetime.utcnow)
     end_time = Column(DateTime)
     result = Column(Text)
+    duration_sec = Column(Integer, nullable=True)
     capture_id = Column(Integer, ForeignKey('captures.id'))
 
     # ORM relationships
