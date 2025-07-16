@@ -6,7 +6,7 @@ services:
   web:
     build: ./project
     network_mode: host  # Use host network mode to access physical network
-    command: sh -c "chmod -R 777 /usr/src/app/data && uvicorn main:app --host 0.0.0.0 --reload"  # Fix permissions then start FastAPI
+    command: sh -c "mkdir -p /usr/src/app/logs && chmod -R 777 /usr/src/app/data && uvicorn main:app --host 0.0.0.0 --reload"  # Ensure logs dir, fix permissions, then start FastAPI
     volumes:
       - ./project:/usr/src/app  # Mount project source code for live reload
       - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
@@ -22,7 +22,7 @@ services:
   # Celery worker service for background task processing
   worker:
     build: ./project
-    command: sh -c "chmod -R 777 /usr/src/app/data && celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log"  # Fix permissions then start Celery worker
+    command: sh -c "mkdir -p /usr/src/app/logs && chmod -R 777 /usr/src/app/data && celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log"  # Ensure logs dir, fix permissions, then start Celery worker
     volumes:
       - ./project:/usr/src/app  # Mount project source code
       - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
@@ -45,7 +45,7 @@ services:
     build: ./project
     ports:
       - 5556:5555  # Expose Flower dashboard on host port 5556
-    command: celery --broker=redis://redis:6379/0 flower --port=5555  # Start Flower on port 5555
+    command: sh -c "mkdir -p /usr/src/app/logs && celery --broker=redis://redis:6379/0 flower --port=5555 --log-file=logs/flower.log"  # Ensure logs dir, then start Flower and log to logs/flower.log
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL
       - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
@@ -55,6 +55,8 @@ services:
       - worker  # Wait for worker
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Allow access to host network
+    volumes:
+      - ./project/logs:/usr/src/app/logs
 
   # Redis service for Celery broker and backend
   redis:
