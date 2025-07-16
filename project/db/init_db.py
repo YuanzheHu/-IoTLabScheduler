@@ -1,6 +1,9 @@
-from .base import engine, Base, SessionLocal
-from .models import Device, Experiment, Capture
+from project.db.base import engine, Base, SessionLocal
+from project.db.models import Device, Experiment, Capture
+from sqlalchemy import MetaData
 
+# Drop all tables (reset database)
+Base.metadata.drop_all(bind=engine)
 # Create all tables
 Base.metadata.create_all(bind=engine)
 
