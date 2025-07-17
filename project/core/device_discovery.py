@@ -11,10 +11,26 @@ import subprocess
 import re
 import csv
 from typing import List, Dict, Optional
+import sys
+import logging
 
 CLEAN_FIELDS = [
     'Category', 'Name', 'MAC address', 'Phone', 'Email', 'Password'
 ]
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename='logs/app.log',
+    filemode='a'
+)
+console = logging.StreamHandler(sys.stdout)
+console.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)
+logger = logging.getLogger(__name__)
 
 class DeviceDiscovery:
     def __init__(self, clean_file: Optional[str] = None):
@@ -25,7 +41,7 @@ class DeviceDiscovery:
         """
         Use nmap -sn -PR to scan the subnet and return a list of active hosts (ip, mac).
         """
-        print(f"Scanning subnet {subnet} with nmap...")
+        logger.info(f"Scanning subnet {subnet} with nmap...")
         
         # Use ARP scanning to get MAC addresses
         try:
@@ -34,24 +50,24 @@ class DeviceDiscovery:
                 capture_output=True, text=True, timeout=120
             )
         except subprocess.TimeoutExpired:
-            print("Nmap scan timed out...")
+            logger.error("Nmap scan timed out...")
             return []
         except FileNotFoundError:
-            print("nmap not found, trying without sudo...")
+            logger.warning("nmap not found, trying without sudo...")
             try:
                 result = subprocess.run(
                     ['nmap', '-sn', '-PR', subnet], 
                     capture_output=True, text=True, timeout=120
                 )
             except subprocess.TimeoutExpired:
-                print("Nmap scan timed out...")
+                logger.error("Nmap scan timed out...")
                 return []
         
         hosts = []
         current_ip = None
         current_mac = None
         
-        print(f"Nmap output:\n{result.stdout}")
+        logger.info(f"Nmap output:\n{result.stdout}")
         
         for line in result.stdout.splitlines():
             if line.startswith('Nmap scan report for'):
@@ -81,7 +97,7 @@ class DeviceDiscovery:
                 'MAC': current_mac if current_mac else 'Unknown'
             })
         
-        print(f"Discovered {len(hosts)} hosts: {hosts}")
+        logger.info(f"Discovered {len(hosts)} hosts: {hosts}")
         return hosts
 
     @staticmethod
@@ -150,7 +166,7 @@ class DeviceDiscovery:
                     'Password': 'Unknown'
                 })
         
-        print(f"Identified {len(identified)} devices")
+        logger.info(f"Identified {len(identified)} devices")
         return identified
 
 if __name__ == '__main__':
@@ -159,9 +175,9 @@ if __name__ == '__main__':
     subnet = '10.12.0.0/24'  # Change as needed
     dd = DeviceDiscovery(clean_file)
     devices = dd.discover(subnet)
-    print(f"Discovered devices: {devices}")
+    logger.info(f"Discovered devices: {devices}")
     identified = dd.identify(devices)
-    print(f"Identified devices: {identified}")
+    logger.info(f"Identified devices: {identified}")
 
     # Save scan result
     scan_result_file = '../data/scan_result.csv'
@@ -169,7 +185,7 @@ if __name__ == '__main__':
         writer = csv.DictWriter(f, fieldnames=['IP', 'MAC'])
         writer.writeheader()
         writer.writerows(devices)
-    print(f"Scan result saved to {scan_result_file}")
+    logger.info(f"Scan result saved to {scan_result_file}")
 
     # Save identified result (sorted by Category)
     identified_result_file = '../data/identified_result.csv'
@@ -178,6 +194,6 @@ if __name__ == '__main__':
         writer = csv.DictWriter(f, fieldnames=['IP', 'Category', 'Name', 'MAC', 'Phone', 'Email', 'Password'])
         writer.writeheader()
         writer.writerows(identified_sorted)
-    print(f"Identified result saved to {identified_result_file}")
+    logger.info(f"Identified result saved to {identified_result_file}")
 
  

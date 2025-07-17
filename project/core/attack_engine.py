@@ -11,10 +11,24 @@ This module provides functionality for:
 import asyncio
 import logging
 import subprocess
+import sys
 from typing import Optional, Dict, Any
 
 # Configure logger
 logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename='logs/app.log',
+    filemode='a'
+)
+console = logging.StreamHandler(sys.stdout)
+console.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)
 
 class AttackEngine:
     """Attack engine for executing various network attacks"""

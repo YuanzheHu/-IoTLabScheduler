@@ -1,4 +1,4 @@
-# FastAPI + Celery + Docker Template
+# IoT Lab Experiment Scheduler
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.95+-green.svg)](https://fastapi.tiangolo.com/)
@@ -6,476 +6,175 @@
 [![Docker](https://img.shields.io/badge/Docker-Required-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A production-ready template for building asynchronous task processing systems with FastAPI, Celery, Redis, and Docker. This project demonstrates best practices for handling background tasks, real-time status updates, and scalable microservices architecture.
+A prototype system for managing, scheduling, and monitoring network experiments on IoT devices in a laboratory environment. Built with microservices architecture using FastAPI, Celery, and Redis.
 
-> **Note**: This project is based on concepts from [TestDriven.io's comprehensive FastAPI and Celery tutorial](https://testdriven.io/blog/fastapi-and-celery/#celery-setup), enhanced with additional features like UK timezone support, comprehensive testing, and production-ready configurations.
+## Features
 
-## 🚀 Features
+- **Device Discovery**: Subnet scanning with nmap
+- **Port & OS Fingerprinting**: On-demand device scanning
+- **Network Attack Experiments**: SYN/UDP/ICMP flooding with async execution
+- **Traffic Capture**: Automated PCAP capture and archiving
+- **Real-time Monitoring**: Live log streaming and experiment status tracking
+- **Plugin Interface**: Extensible architecture for new experiment types
 
-- **Asynchronous Task Processing** - Handle long-running tasks without blocking the web API
-- **Real-time Status Updates** - Live task status monitoring with automatic polling
-- **Scalable Architecture** - Multiple workers, load balancing, and horizontal scaling
-- **Production Ready** - Docker containerization, logging, monitoring, and health checks
-- **Developer Friendly** - Hot reload, comprehensive testing, and detailed documentation
-- **UK Timezone Support** - All timestamps and logs use UK time (Europe/London)
-- **Task Monitoring** - Flower dashboard for real-time task queue monitoring
+## Architecture
+![System Architecture & Experiment Flow](docs/images/sequence%20diagram.png)
 
-## 🏗️ Architecture
+**Figure:** High-level architecture and experiment scheduling flow.
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   FastAPI       │    │   Celery        │
-│   (Web UI)      │◄──►│   (Web API)     │◄──►│   (Worker)      │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Static Files  │    │   Templates     │    │   Logs          │
-│   (CSS/JS)      │    │   (HTML)        │    │   (celery.log)  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │   Redis         │
-                       │   (Broker)      │
-                       └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │   Flower        │
-                       │   (Dashboard)   │
-                       └─────────────────┘
-```
+- **FastAPI** exposes REST endpoints for device management and experiment scheduling.
+- **Celery** workers execute experiments asynchronously, coordinating with the **Attack Engine** and **Traffic Capture** modules.
+- **Redis** acts as the message broker and result backend for Celery.
+- **SQLite** stores device, experiment, and capture metadata.
+- **Plugin Interface** allows new experiment types to be added without modifying the core system.
 
-## 📁 Project Structure
+## Docker Build & Run
 
-```
-fastapi-celery/
-├── docker-compose.yml          # Service orchestration
-├── .vscode/
-│   └── settings.json          # VSCode Redis connection config
-├── project/
-│   ├── main.py               # FastAPI application
-│   ├── worker.py             # Celery task definitions
-│   ├── requirements.txt      # Python dependencies
-│   ├── Dockerfile           # Container configuration
-│   ├── static/
-│   │   ├── main.css         # Frontend styles
-│   │   └── main.js          # Frontend JavaScript
-│   ├── templates/
-│   │   ├── _base.html       # Base template
-│   │   ├── footer.html      # Footer template
-│   │   └── home.html        # Main page template
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── conftest.py      # Test configuration
-│   │   └── test_tasks.py    # Test cases
-│   └── logs/                # Celery log directory
-└── README.md               # This file
-```
-
-## 🛠️ Technology Stack
-
-- **Backend**: FastAPI (Python web framework)
-- **Task Queue**: Celery (Distributed task queue)
-- **Message Broker**: Redis (In-memory data store)
-- **Frontend**: HTML/CSS/JavaScript with Bootstrap
-- **Containerization**: Docker & Docker Compose
-- **Monitoring**: Flower (Celery monitoring tool)
-- **Testing**: pytest
-- **Timezone**: UK (Europe/London)
-
-## 🚀 Quick Start
+To build and run the IoT Lab Experiment Scheduler using Docker:
 
 ### Prerequisites
 
-- Docker
-- Docker Compose
-- Git
+- Docker and Docker Compose
 
-### 1. Clone and Setup
+### Quick Start
 
+1. Clone the repository:
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd fastapi-celery
-
-# Start all services
-docker-compose up -d --build
+git clone <repository-url>
+cd IoTLabScheduler
 ```
 
-### 2. Access the Application
+2. Build and start all services with Docker Compose:
+```bash
+docker-compose up --build -d
 
-- **Web Interface**: http://localhost:8004
-- **API Documentation**: http://localhost:8004/docs
+docker compose up -d --build --scale worker=4
+```
+
+4. Access the services:
+- **FastAPI API**: http://localhost:8000
 - **Flower Dashboard**: http://localhost:5556
-- **Redis**: localhost:6379
+- **API Documentation**: http://localhost:8000/docs
 
-### 3. Test the System
+### Docker Services
 
-1. Open http://localhost:8004
-2. Click "Short", "Medium", or "Long" buttons
-3. Watch tasks execute in real-time
-4. Monitor task queue in Flower dashboard
+The `docker-compose.yml` includes:
+- **FastAPI Web Server** (Port 8000)
+- **Celery Workers** (Multiple instances)
+- **Redis** (Message broker and result backend)
+- **Flower Dashboard** (Port 5556)
 
-## 📚 API Reference
+### Testing
 
-### Endpoints
-
-#### GET /
-Returns the main web interface.
-
-#### POST /tasks
-Creates a new asynchronous task.
-
-**Request Body:**
-```json
-{
-  "type": 1  // 1=Short(10s), 2=Medium(20s), 3=Long(30s)
-}
-```
-
-**Response:**
-```json
-{
-  "task_id": "uuid-string"
-}
-```
-
-#### GET /tasks/{task_id}
-Gets the status of a specific task.
-
-**Response:**
-```json
-{
-  "task_id": "uuid-string",
-  "task_status": "PENDING|SUCCESS|FAILURE",
-  "task_result": null|true|false
-}
-```
-
-## 🔧 Using as a Template
-
-### 1. Basic Customization
-
-#### Modify Task Types
-Edit `project/worker.py` to add your own tasks:
-
-```python
-@celery.task(name="process_file")
-def process_file(file_path):
-    # Your file processing logic
-    result = analyze_file(file_path)
-    return result
-
-@celery.task(name="send_email")
-def send_email(email_data):
-    # Your email sending logic
-    send_mail(email_data)
-    return {"status": "sent"}
-```
-
-#### Update API Endpoints
-Modify `project/main.py` to handle your tasks:
-
-```python
-@app.post("/process-file")
-def create_file_task(file_data: dict):
-    task = process_file.delay(file_data["path"])
-    return {"task_id": task.id}
-
-@app.post("/send-email")
-def create_email_task(email_data: dict):
-    task = send_email.delay(email_data)
-    return {"task_id": task.id}
-```
-
-#### Customize Frontend
-Update `project/templates/home.html` and `project/static/main.js` for your UI needs.
-
-### 2. Advanced Customization
-
-#### Add Database Support
-Add PostgreSQL to `docker-compose.yml`:
-
-```yaml
-services:
-  database:
-    image: postgres:13
-    environment:
-      POSTGRES_DB: your_db
-      POSTGRES_USER: your_user
-      POSTGRES_PASSWORD: your_password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-```
-
-#### Add Authentication
-Implement JWT authentication in `main.py`:
-
-```python
-from fastapi import Depends, HTTPException
-from fastapi.security import HTTPBearer
-
-security = HTTPBearer()
-
-@app.post("/protected-endpoint")
-def protected_endpoint(token: str = Depends(security)):
-    # Verify token
-    pass
-```
-
-#### Scale Workers
-Increase worker instances:
-
+Run the test suite:
 ```bash
-docker-compose up -d --scale worker=5
+cd project
+pytest
 ```
 
-### 3. Production Deployment
+## Development
 
-#### Environment Variables
-Create `.env` file:
+### Local Development Setup
 
-```env
-CELERY_BROKER_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/0
-TZ=Europe/London
-ENVIRONMENT=production
-```
-
-#### Production Docker Compose
-Create `docker-compose.prod.yml`:
-
-```yaml
-version: '3.8'
-services:
-  web:
-    restart: always
-    environment:
-      - ENVIRONMENT=production
-  worker:
-    restart: always
-    deploy:
-      replicas: 3
-  redis:
-    restart: always
-    volumes:
-      - redis_data:/data
-```
-
-## 🧪 Testing
-
-### Run All Tests
+1. Install dependencies:
 ```bash
-docker-compose exec web python -m pytest -v
+pip install -r project/requirements.txt
 ```
 
-### Run Specific Tests
+2. Start Redis:
 ```bash
-# Unit tests (fast)
-docker-compose exec web python -m pytest -k "test_mock_task" -v
-
-# Integration tests
-docker-compose exec web python -m pytest -k "test_task_status" -v
-
-# API tests
-docker-compose exec web python -m pytest -k "test_home" -v
+docker run -d -p 6379:6379 redis:7
 ```
 
-### Test Coverage
+3. Run the FastAPI server:
 ```bash
-docker-compose exec web python -m pytest --cov=. -v
+cd project
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## 📊 Monitoring
-
-### Flower Dashboard
-Access http://localhost:5556 to monitor:
-- Active workers
-- Task queue status
-- Task execution history
-- Worker performance metrics
-
-### Logs
+4. Start Celery worker:
 ```bash
-# View all logs
-docker-compose logs
-
-# View specific service logs
-docker-compose logs worker
-docker-compose logs web
-
-# Follow logs in real-time
-docker-compose logs -f worker
+cd project
+celery -A worker.celery worker --loglevel=info
 ```
 
-### Redis Monitoring
+5. Start Flower dashboard:
 ```bash
-# Connect to Redis CLI
-docker exec -it fastapi-celery-redis-1 redis-cli
-
-# View all keys
-KEYS *
-
-# Monitor Redis operations
-MONITOR
+cd project
+celery -A worker.celery flower --port=5556
 ```
 
-## 🔄 Development Workflow
+### Usage
 
-### 1. Local Development
+1. **Device Discovery**:
 ```bash
-# Start services
-docker-compose up -d
-
-# Make code changes (hot reload enabled)
-# View changes at http://localhost:8004
-
-# Run tests
-docker-compose exec web python -m pytest -v
+curl -X POST "http://localhost:8000/devices/scan" \
+     -H "Content-Type: application/json" \
+     -d '{"subnet": "10.12.0.0/24"}'
 ```
 
-### 2. Adding New Features
-1. Add task definition in `worker.py`
-2. Add API endpoint in `main.py`
-3. Update frontend in `templates/` and `static/`
-4. Add tests in `tests/`
-5. Test and deploy
-
-### 3. Debugging
+2. **Schedule an Experiment**:
 ```bash
-# View real-time logs
-docker-compose logs -f
-
-# Access container shell
-docker-compose exec web bash
-docker-compose exec worker bash
-
-# Check Redis data
-docker exec fastapi-celery-redis-1 redis-cli KEYS "*"
+curl -X POST "http://localhost:8000/experiments/" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "SYN Flood Test",
+       "attack_type": "SYN",
+       "target_ip": "192.168.1.100",
+       "duration_sec": 60
+     }'
 ```
 
-## 🚀 Deployment
-
-### Docker Deployment
+3. **Check Experiment Status**:
 ```bash
-# Build and deploy
-docker-compose -f docker-compose.prod.yml up -d --build
-
-# Scale workers
-docker-compose -f docker-compose.prod.yml up -d --scale worker=5
+curl "http://localhost:8000/experiments/{experiment_id}/status"
 ```
 
-### Kubernetes Deployment
-Create Kubernetes manifests for each service and deploy to your cluster.
-
-### Cloud Deployment
-Deploy to AWS, GCP, or Azure using their container services.
-
-## 🔧 Configuration
-
-### Environment Variables
-- `CELERY_BROKER_URL`: Redis connection URL
-- `CELERY_RESULT_BACKEND`: Redis result backend URL
-- `TZ`: Timezone (default: Europe/London)
-
-### Docker Configuration
-- `ports`: Service port mappings
-- `volumes`: File system mounts
-- `environment`: Environment variables
-- `depends_on`: Service dependencies
-
-### Celery Configuration
-- `broker_url`: Message broker URL
-- `result_backend`: Result storage URL
-- `timezone`: Task execution timezone
-- `enable_utc`: UTC timezone setting
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Redis Connection Issues
+4. **Download PCAP File**:
 ```bash
-# Check Redis status
-docker-compose ps redis
-
-# Test Redis connection
-docker exec fastapi-celery-redis-1 redis-cli ping
+curl "http://localhost:8000/captures/{capture_id}/download" \
+     --output experiment.pcap
 ```
 
-#### Worker Not Processing Tasks
-```bash
-# Check worker logs
-docker-compose logs worker
+## API Endpoints
 
-# Restart worker
-docker-compose restart worker
+### Device Management
+- `GET /devices/` - List all devices
+- `POST /devices/scan` - Scan subnet for devices
+- `GET /devices/{id}` - Get device details
+- `GET /devices/{ip}/portscan` - Port scan device
+- `GET /devices/{ip}/oscan` - OS fingerprint device
+
+### Experiment Management
+- `POST /experiments/` - Schedule new experiment
+- `GET /experiments/` - List all experiments
+- `GET /experiments/{id}` - Get experiment details
+- `POST /experiments/{id}/stop` - Stop running experiment
+
+### Traffic Capture
+- `GET /captures/` - List PCAP records
+- `GET /captures/{id}` - Get capture metadata
+- `GET /captures/{id}/download` - Download PCAP file
+
+## Project Structure
+
+```
+IoTLabScheduler/
+├── project/
+│   ├── api/              # FastAPI endpoints
+│   ├── core/             # Core business logic
+│   ├── db/               # Database models and setup
+│   ├── data/             # PCAP files and data
+│   ├── logs/             # Application logs
+│   ├── tests/            # Test suite
+│   ├── main.py           # FastAPI application
+│   └── worker.py         # Celery worker tasks
+├── docs/                 # Documentation
+├── docker-compose.yml    # Docker services
+└── README.md
 ```
 
-#### Frontend Not Updating
-```bash
-# Check web service
-docker-compose logs web
+## License
 
-# Clear browser cache
-# Check browser console for errors
-```
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-### Reset Everything
-```bash
-# Complete reset
-docker-compose down -v
-docker-compose up -d --build
-```
-
-## 📈 Performance Optimization
-
-### Scaling Workers
-```bash
-# Scale to 5 workers
-docker-compose up -d --scale worker=5
-```
-
-### Redis Optimization
-- Configure Redis persistence
-- Set appropriate memory limits
-- Enable Redis clustering for high availability
-
-### Monitoring Performance
-- Use Flower dashboard for metrics
-- Monitor Redis memory usage
-- Track task execution times
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- FastAPI for the excellent web framework
-- Celery for the robust task queue system
-- Redis for the reliable message broker
-- Docker for the containerization platform
-- [TestDriven.io's FastAPI and Celery Tutorial](https://testdriven.io/blog/fastapi-and-celery/#celery-setup) for the foundational concepts and implementation patterns
-
-## 📞 Support
-
-For questions and support:
-- Create an issue in the repository
-- Check the documentation
-- Review the troubleshooting section
-
----
-
-**Happy coding! 🚀**

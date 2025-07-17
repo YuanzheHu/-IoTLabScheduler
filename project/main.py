@@ -12,6 +12,8 @@ Key Features:
 - Jinja2 template rendering for the home page
 """
 
+import sys
+import logging
 from fastapi import Body, FastAPI, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,43 +37,15 @@ app.include_router(devices_router)
 app.include_router(experiments_router)
 app.include_router(captures_router)
 
-@app.get("/")
-def home(request: Request):
-    """
-    Render the home page using Jinja2 templates.
-    """
-    return templates.TemplateResponse("home.html", context={"request": request})
-
-@app.post("/tasks", status_code=201)
-def run_task(payload = Body(...)):
-    """
-    Create and run a Celery task asynchronously.
-
-    Args:
-        payload (dict): JSON body containing the task type.
-
-    Returns:
-        JSONResponse: Contains the Celery task ID.
-    """
-    task_type = payload["type"]
-    task = create_task.delay(int(task_type))
-    return JSONResponse({"task_id": task.id})
-
-@app.get("/tasks/{task_id}")
-def get_status(task_id):
-    """
-    Get the status and result of a Celery task by its ID.
-
-    Args:
-        task_id (str): The Celery task ID.
-
-    Returns:
-        JSONResponse: Contains task ID, status, and result.
-    """
-    task_result = AsyncResult(task_id, app=celery)
-    result = {
-        "task_id": task_id,
-        "task_status": task_result.status,
-        "task_result": task_result.result
-    }
-    return JSONResponse(result)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename='logs/web.log',
+    filemode='a'
+)
+console = logging.StreamHandler(sys.stdout)
+console.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)

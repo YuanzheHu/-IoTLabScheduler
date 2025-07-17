@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import sys
 from datetime import datetime
 from celery import Celery
 from db.base import SessionLocal
@@ -23,9 +24,17 @@ Celery is configured to use Redis as broker and result backend, with UK timezone
 # Configure logging with UK timezone
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [UK] %(levelname)s %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename='logs/app.log',
+    filemode='a'
 )
+# Also log to stdout
+console = logging.StreamHandler(sys.stdout)
+console.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)
 
 celery = Celery(__name__)
 celery.conf.update(

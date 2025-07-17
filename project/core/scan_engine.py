@@ -11,8 +11,22 @@ import logging
 from typing import Optional, Dict, Any, List
 import os
 import json
+import sys
 
 logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename='logs/app.log',
+    filemode='a'
+)
+console = logging.StreamHandler(sys.stdout)
+console.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)
 
 class ScanEngine:
     """Scan engine for port scanning and OS fingerprinting"""

@@ -159,58 +159,6 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Device deleted successfully"}
 
-@router.get("/subnet/{subnet}/scan", response_model=List[Dict[str, Any]])
-def scan_subnet_get(subnet: str, db: Session = Depends(get_db)):
-    """Scans a subnet and returns device information (GET method for easier frontend integration).
-
-    Args:
-        subnet (str): Subnet to scan (e.g., "10.12.0.0/24").
-        db (Session): Database session.
-
-    Returns:
-        List[Dict[str, Any]]: List of devices with Category, Name, MAC address, Phone, Email, Password.
-
-    Raises:
-        HTTPException: If the scan fails.
-    """
-    try:
-        clean_file = os.path.join(os.path.dirname(__file__), "../data/clean_devices.csv")
-        discovery = DeviceDiscovery(clean_file)
-        devices = discovery.discover(subnet)
-        identified_devices = discovery.identify(devices)
-        for device_info in identified_devices:
-            existing_device = db.query(Device).filter(
-                Device.mac_address == device_info['MAC']
-            ).first()
-            if existing_device:
-                existing_device.ip_address = device_info['IP']
-                existing_device.hostname = device_info['Name']
-                existing_device.device_type = device_info['Category']
-                existing_device.status = "online"
-                existing_device.password = device_info.get('Password', None)
-                existing_device.port = None
-                existing_device.os_info = None
-                existing_device.phone = device_info.get('Phone', None)
-                existing_device.email = device_info.get('Email', None)
-            else:
-                new_device = Device(
-                    ip_address=device_info['IP'],
-                    mac_address=device_info['MAC'],
-                    hostname=device_info['Name'],
-                    device_type=device_info['Category'],
-                    status="online",
-                    password=device_info.get('Password', None),
-                    port=None,
-                    os_info=None,
-                    phone=device_info.get('Phone', None),
-                    email=device_info.get('Email', None)
-                )
-                db.add(new_device)
-        db.commit()
-        return identified_devices
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
-
 @router.get("/{ip}/portscan", response_model=dict)
 async def port_scan_device(
     ip: str,
