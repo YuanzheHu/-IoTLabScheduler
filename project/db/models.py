@@ -1,8 +1,7 @@
+import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.types import JSON
 from .base import Base
-import datetime
 
 class Device(Base):
     """
@@ -10,29 +9,23 @@ class Device(Base):
 
     Fields:
         id: Primary key.
-        ip_address: IP address of the device.
-        mac_address: MAC address of the device.
-        hostname: Hostname of the device.
-        device_type: Type/category of the device (e.g., Camera, Sensor).
-        os_info: Operating system information.
+        ip_address: IP address of the device (nullable, not unique).
+        mac_address: MAC address of the device (unique).
+        hostname: Device name.
         status: Current status (e.g., online, offline).
-        last_seen: Timestamp of last discovery.
         port: Port information (e.g., "55443", "8080").
-        email: Email for login.
+        os_info: Operating system information.
+        last_seen: Timestamp of last discovery (optional).
     """
     __tablename__ = 'devices'
     id = Column(Integer, primary_key=True, index=True)
-    ip_address = Column(String, index=True, nullable=False, unique=True)
-    mac_address = Column(String, index=True, nullable=False, unique=True)
+    ip_address = Column(String, index=True, nullable=True, unique=False)  # nullable, not unique
+    mac_address = Column(String, index=True, nullable=False, unique=True) # unique
     hostname = Column(String)
-    device_type = Column(String)
     status = Column(String)
-    last_seen = Column(DateTime, default=datetime.datetime.utcnow)
-    port = Column(String, nullable=True)  # 或 Column(JSON) 如果你想存为数组
+    port = Column(String, nullable=True)
     os_info = Column(String, nullable=True)
-    phone = Column(String, nullable=True)
-    email = Column(String, nullable=True)
-    password = Column(String, nullable=True)
+    last_seen = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Capture(Base):
     """

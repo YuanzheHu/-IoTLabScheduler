@@ -16,7 +16,6 @@ if __name__ == '__main__':
             ip_address='10.12.0.100',
             mac_address='00:11:22:33:44:55',
             hostname='test-device',
-            device_type='Camera',
             os_info='Linux',
             status='online'
         )
