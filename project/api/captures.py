@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from db.base import SessionLocal
-from db.models import Capture
+from db.models import Capture, Device, Experiment
 from .schemas import CaptureRead, CaptureDeleteResponse
 import os
 
@@ -30,6 +30,21 @@ def list_captures(
     if end_time:
         query = query.filter(Capture.created_at <= end_time)
     return query.order_by(Capture.created_at.desc()).all()
+
+@router.get("/device/{mac_address}", response_model=List[CaptureRead])
+def get_device_captures(mac_address: str, db: Session = Depends(get_db)):
+    """
+    List all PCAP captures related to a device (by mac_address).
+    """
+    device = db.query(Device).filter(Device.mac_address == mac_address).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    experiments = db.query(Experiment).filter(Experiment.target_ip == device.ip_address).all()
+    experiment_ids = [e.id for e in experiments]
+    if not experiment_ids:
+        return []
+    captures = db.query(Capture).filter(Capture.experiment_id.in_(experiment_ids)).order_by(Capture.created_at.desc()).all()
+    return captures
 
 @router.get("/{capture_id}/download")
 def download_capture(capture_id: int, db: Session = Depends(get_db)):
