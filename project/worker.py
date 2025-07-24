@@ -203,3 +203,61 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, port, duration,
     finally:
         # Step 9: Always close the DB session
         db.close() 
+
+@celery.task(name="run_traffic_capture")
+def run_traffic_capture(experiment_id, target_ip, duration, interface="eth0"):
+    """
+    Celery task to perform only traffic capture (no attack), save PCAP and update Experiment/Capture.
+    """
+    logger = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        exp = db.query(Experiment).get(experiment_id)
+        if not exp:
+            logger.error(f"Experiment {experiment_id} not found.")
+            return False
+        exp.status = "running"
+        db.commit()
+        db.refresh(exp)
+
+        # Start packet capture
+        safe_ip = target_ip.replace(':', '_').replace('.', '_')
+        pcap_dir = os.path.join("data/pcaps", safe_ip)
+        os.makedirs(pcap_dir, exist_ok=True)
+        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+        pcap_filename = f"capture_{experiment_id}_{safe_ip}_{timestamp}.pcap"
+        pcap_path = os.path.join(pcap_dir, pcap_filename)
+        tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface)
+        tcpdump.start()
+        time.sleep(duration)
+        tcpdump.stop()
+
+        # Save PCAP info
+        file_size = os.path.getsize(pcap_path) if os.path.exists(pcap_path) else 0
+        capture = Capture(
+            file_name=pcap_filename,
+            file_path=pcap_path,
+            experiment_id=experiment_id,
+            file_size=file_size,
+            description=f"Traffic capture for experiment {experiment_id} (target_ip={target_ip})"
+        )
+        db.add(capture)
+        db.commit()
+        db.refresh(capture)
+        exp.capture_id = capture.id
+        exp.status = "finished"
+        exp.end_time = datetime.utcnow()
+        exp.result = "traffic_capture_done"
+        db.commit()
+        logger.info(f"Traffic capture experiment {experiment_id} completed.")
+        return True
+    except Exception as e:
+        logger.error(f"Traffic capture experiment {experiment_id} failed: {e}")
+        if exp:
+            exp.status = "failed"
+            exp.end_time = datetime.utcnow()
+            exp.result = str(e)
+            db.commit()
+        return False
+    finally:
+        db.close() 

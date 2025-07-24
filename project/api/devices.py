@@ -8,6 +8,9 @@ import os
 from core.scan_engine import ScanEngine
 import ipaddress
 import asyncio
+import datetime
+from pydantic import BaseModel
+from .schemas import DeviceRead
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -26,160 +29,115 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/scan", response_model=List[Dict[str, Any]])
-def scan_subnet(subnet: str, db: Session = Depends(get_db)):
-    """Scans a subnet for devices and returns device information.
+class ScanRequest(BaseModel):
+    subnet: str
+
+@router.post("/scan", response_model=List[Dict[str, str]])
+def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
+    """Scans a subnet for devices and returns device information (online and offline).
 
     Args:
-        subnet (str): Subnet to scan (e.g., "10.12.0.0/24").
+        request (ScanRequest): Request body containing subnet.
         db (Session): Database session.
 
     Returns:
-        List[Dict[str, Any]]: List of devices with Category, Name, MAC address, Phone, Email, Password.
-
-    Raises:
-        HTTPException: If the scan fails.
+        List[Dict[str, str]]: List of devices with MAC, Name, IP, Status.
     """
     try:
-        clean_file = os.path.join(os.path.dirname(__file__), "../data/clean_devices.csv")
-        discovery = DeviceDiscovery(clean_file)
-        devices = discovery.discover(subnet)
-        identified_devices = discovery.identify(devices)
-        for device_info in identified_devices:
-            existing_device = db.query(Device).filter(
-                Device.mac_address == device_info['MAC']
-            ).first()
-            if existing_device:
-                existing_device.ip_address = device_info['IP']
-                existing_device.hostname = device_info['Name']
-                existing_device.device_type = device_info['Category']
-                existing_device.status = "online"
-                existing_device.password = device_info.get('Password', None)
-                existing_device.port = None
-                existing_device.os_info = None
-                existing_device.phone = device_info.get('Phone', None)
-                existing_device.email = device_info.get('Email', None)
-            else:
-                new_device = Device(
-                    ip_address=device_info['IP'],
-                    mac_address=device_info['MAC'],
-                    hostname=device_info['Name'],
-                    device_type=device_info['Category'],
-                    status="online",
-                    password=device_info.get('Password', None),
-                    port=None,
-                    os_info=None,
-                    phone=device_info.get('Phone', None),
-                    email=device_info.get('Email', None)
-                )
-                db.add(new_device)
+        subnet = request.subnet
+        devices_txt = os.path.join(os.path.dirname(__file__), "../data/devices.txt")
+        discovery = DeviceDiscovery(devices_txt)
+        scanned = discovery.discover(subnet)
+        identified_devices = discovery.identify(scanned)
+
+        # 1. Ensure all known devices from devices.txt exist in DB
+        mac_to_device = {d.mac_address: d for d in db.query(Device).all()}
+        for dev in discovery.mac_name_mapping.items():
+            mac, name = dev
+            # Ensure MAC is properly normalized
+            normalized_mac = DeviceDiscovery.normalize_mac(mac)
+            if normalized_mac not in mac_to_device:
+                db.add(Device(mac_address=normalized_mac, hostname=name, status='offline', ip_address=''))
         db.commit()
-        return identified_devices
+
+        # 2. Update DB: set all known devices offline by default
+        for device in db.query(Device).all():
+            device.status = 'offline'
+            device.ip_address = ''
+        db.commit()
+
+        # 3. Update DB: set scanned/online devices
+        for device_info in identified_devices:
+            if not device_info['IP']:
+                continue  # Only update online devices here
+            # Ensure MAC is properly normalized for comparison
+            normalized_mac = DeviceDiscovery.normalize_mac(device_info['MAC'])
+            device = db.query(Device).filter(Device.mac_address == normalized_mac).first()
+            if device:
+                device.ip_address = device_info['IP']
+                device.hostname = device_info['Name']
+                device.status = 'online'
+                device.last_seen = datetime.datetime.utcnow()
+            else:
+                db.add(Device(
+                    ip_address=device_info['IP'],
+                    mac_address=normalized_mac,
+                    hostname=device_info['Name'],
+                    status='online',
+                    last_seen=datetime.datetime.utcnow()
+                ))
+        db.commit()
+
+        # 4. Return all devices (online and offline)
+        all_devices = db.query(Device).all()
+        result = []
+        for d in all_devices:
+            result.append({
+                'mac_address': d.mac_address,
+                'hostname': d.hostname,
+                'ip_address': d.ip_address or '',
+                'status': d.status
+            })
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
-@router.get("/", response_model=List[Dict[str, Any]])
-def list_devices(db: Session = Depends(get_db)):
-    """Retrieves all devices from the database.
-
-    Args:
-        db (Session): Database session.
+@router.get("/", response_model=List[Dict[str, str]])
+def get_devices(db: Session = Depends(get_db)):
+    """Get all devices from database.
 
     Returns:
-        List[Dict[str, Any]]: List of all devices.
+        List[Dict[str, str]]: List of devices with MAC, Name, IP, Status.
     """
-    devices = db.query(Device).all()
-    result = []
-    for device in devices:
-        result.append({
-            "IP": device.ip_address,
-            "Category": device.device_type or "Unknown",
-            "Name": device.hostname or "Unknown",
-            "MAC address": device.mac_address,
-            "Phone": device.phone,
-            "Email": device.email,
-            "Password": device.password,
-            "Port": device.port,
-            "Status": device.status,
-            "Last Seen": device.last_seen.isoformat() if device.last_seen else None,
-            "OS Info": device.os_info
-        })
-    return result
+    try:
+        devices = db.query(Device).all()
+        result = []
+        for d in devices:
+            result.append({
+                'mac_address': d.mac_address,
+                'hostname': d.hostname,
+                'ip_address': d.ip_address or '',
+                'status': d.status
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get devices: {str(e)}")
 
-@router.get("/{device_id}", response_model=Dict[str, Any])
-def get_device(device_id: int, db: Session = Depends(get_db)):
-    """Retrieves a specific device by ID.
-
-    Args:
-        device_id (int): Device ID.
-        db (Session): Database session.
-
-    Returns:
-        Dict[str, Any]: Device information.
-
-    Raises:
-        HTTPException: If the device is not found.
-    """
-    device = db.query(Device).filter(Device.id == device_id).first()
+@router.get("/mac/{mac_address}", response_model=DeviceRead)
+def get_device_by_mac(mac_address: str, db: Session = Depends(get_db)):
+    device = db.query(Device).filter(Device.mac_address == mac_address).first()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    return {
-        "id": device.id,
-        "IP": device.ip_address,
-        "Category": device.device_type or "Unknown",
-        "Name": device.hostname or "Unknown",
-        "MAC address": device.mac_address,
-        "Phone": device.phone,
-        "Email": device.email,
-        "Password": device.password,
-        "Port": device.port,
-        "Status": device.status,
-        "Last Seen": device.last_seen.isoformat() if device.last_seen else None,
-        "OS Info": device.os_info
-    }
+    return device
 
-@router.delete("/{device_id}")
-def delete_device(device_id: int, db: Session = Depends(get_db)):
-    """Deletes a device by ID.
-
-    Args:
-        device_id (int): Device ID.
-        db (Session): Database session.
-
-    Returns:
-        Dict[str, str]: Success message.
-
-    Raises:
-        HTTPException: If the device is not found.
-    """
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    db.delete(device)
-    db.commit()
-    return {"message": "Device deleted successfully"}
-
-@router.get("/{ip}/portscan", response_model=dict)
+@router.get("/ip/{ip}/portscan", response_model=dict)
 async def port_scan_device(
     ip: str,
     ports: str = "-",
     fast_scan: bool = True,
     db: Session = Depends(get_db)
 ):
-    """Performs a port scan on the given device IP using nmap.
-
-    Args:
-        ip (str): Target device IP address.
-        ports (str, optional): Ports to scan (default: all ports).
-        fast_scan (bool, optional): Use fast scan options.
-        db (Session): Database session.
-
-    Returns:
-        dict: Port scan results.
-
-    Raises:
-        HTTPException: If the IP address is invalid.
-    """
+    """Performs a port scan on the given device IP using nmap."""
     try:
         ipaddress.IPv4Address(ip)
     except Exception:
@@ -193,27 +151,14 @@ async def port_scan_device(
         db.commit()
     return result
 
-@router.get("/{ip}/oscan", response_model=dict)
+@router.get("/ip/{ip}/oscan", response_model=dict)
 async def os_fingerprint_device(
     ip: str,
     fast_scan: bool = True,
     ports: str = "22,80,443",
     db: Session = Depends(get_db)
 ):
-    """Performs OS fingerprinting on the given device IP using nmap.
-
-    Args:
-        ip (str): Target device IP address.
-        fast_scan (bool, optional): Use fast scan options.
-        ports (str, optional): Ports to scan for OS fingerprinting.
-        db (Session): Database session.
-
-    Returns:
-        dict: OS fingerprint results.
-
-    Raises:
-        HTTPException: If the IP address is invalid.
-    """
+    """Performs OS fingerprinting on the given device IP using nmap."""
     try:
         ipaddress.IPv4Address(ip)
     except Exception:

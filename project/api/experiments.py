@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 from db.base import SessionLocal
-from db.models import Experiment
+from db.models import Experiment, Capture
 from .schemas import ExperimentCreate, ExperimentRead
-from worker import run_attack_experiment, stop_attack_experiment
+from worker import run_attack_experiment, stop_attack_experiment, run_traffic_capture
+from core.traffic_capture import TcpdumpUtil
+import os
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -152,4 +154,37 @@ def get_experiment_status(experiment_id: int, db: Session = Depends(get_db)):
         "end_time": exp.end_time,
         "result": exp.result
     }
+
+@router.post("/traffic_capture", response_model=ExperimentRead)
+def traffic_capture(
+    target_ip: str,
+    duration_sec: int = 60,
+    interface: str = "eth0",
+    db: Session = Depends(get_db)
+):
+    """
+    Submit a traffic capture experiment as an async Celery task
+    """
+    exp = Experiment(
+        name=f"Traffic Capture {target_ip}",
+        attack_type="traffic_capture",
+        target_ip=target_ip,
+        port=None,
+        status="pending",
+        start_time=datetime.utcnow(),
+        duration_sec=duration_sec
+    )
+    db.add(exp)
+    db.commit()
+    db.refresh(exp)
+
+    # 调用独立的traffic capture worker任务
+    run_traffic_capture.delay(
+        experiment_id=exp.id,
+        target_ip=target_ip,
+        duration=duration_sec,
+        interface=interface
+    )
+
+    return exp
 
