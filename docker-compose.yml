@@ -22,33 +22,31 @@ services:
   # Celery worker service for background task processing
   worker:
     build: ./project
-    command: sh -c "mkdir -p /usr/src/app/logs && chmod -R 777 /usr/src/app/data && celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log"  # Ensure logs dir, fix permissions, then start Celery worker
+    network_mode: host
+    command: sh -c "mkdir -p /usr/src/app/logs && chmod -R 777 /usr/src/app/data && celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log --concurrency=4 --hostname=worker@%h"
     volumes:
-      - ./project:/usr/src/app  # Mount project source code
-      - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
+      - ./project:/usr/src/app
+      - ./project/data:/usr/src/app/data
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
-      - TZ=Europe/London  # Set timezone for logs and tasks
+      - CELERY_BROKER_URL=redis://localhost:6379/0
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/0
+      - TZ=Europe/London
     depends_on:
-      - web    # Wait for web service to be ready
-      - redis  # Wait for Redis to be ready
+      - web
+      - redis
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Allow access to host network
     user: "0:0"
 
   # Flower dashboard for monitoring Celery tasks
   dashboard:
     build: ./project
-    ports:
-      - 5556:5555  # Expose Flower dashboard on host port 5556
-    command: sh -c "mkdir -p /usr/src/app/logs && celery --broker=redis://redis:6379/0 flower --port=5555 --log-file=logs/flower.log"  # Ensure logs dir, then start Flower and log to logs/flower.log
+    network_mode: host
+    command: sh -c "mkdir -p /usr/src/app/logs && celery --broker=redis://localhost:6379/0 flower --port=5555 --log-file=logs/flower.log"  # Ensure logs dir, then start Flower and log to logs/flower.log
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0  # Celery broker URL
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0  # Celery result backend
+      - CELERY_BROKER_URL=redis://localhost:6379/0  # Celery broker URL
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/0  # Celery result backend
     depends_on:
       - web     # Wait for web service
       - redis   # Wait for Redis
@@ -58,8 +56,17 @@ services:
     volumes:
       - ./project/logs:/usr/src/app/logs
 
+  # Streamlit UI for device dashboard
+  streamlit:
+    build: ./dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./dashboard:/app
+    depends_on:
+      - web
+
   # Redis service for Celery broker and backend
   redis:
     image: redis:7  # Use official Redis image
-    ports:
-      - 6379:6379  # Expose Redis on default port
+    network_mode: host
