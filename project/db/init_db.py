@@ -1,5 +1,5 @@
 from project.db.base import engine, Base, SessionLocal
-from project.db.models import Device, Experiment, Capture
+from project.db.models import Device, Experiment, Capture, ScanResult, PortInfo
 from sqlalchemy import MetaData
 
 # Drop all tables (reset database)

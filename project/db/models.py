@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from .base import Base
 
@@ -82,4 +82,66 @@ class Experiment(Base):
 
     # ORM relationships
     capture = relationship('Capture', foreign_keys=[capture_id])
-    captures = relationship('Capture', backref='experiment', foreign_keys=[Capture.experiment_id]) 
+    captures = relationship('Capture', backref='experiment', foreign_keys=[Capture.experiment_id])
+
+class ScanResult(Base):
+    """
+    ScanResult model representing port scan and OS scan results.
+
+    Fields:
+        id: Primary key.
+        device_id: Foreign key to the related device.
+        scan_type: Type of scan (port_scan, os_scan).
+        target_ip: Target IP address for the scan.
+        scan_time: Timestamp when the scan was performed.
+        scan_duration: Duration of the scan in seconds.
+        ports: JSON field containing port scan results.
+        os_guesses: JSON field containing OS detection results.
+        os_details: JSON field containing detailed OS information.
+        raw_output: Raw scan output from nmap.
+        command: The nmap command that was executed.
+        error: Error message if scan failed.
+        status: Scan status (success, failed, running).
+    """
+    __tablename__ = 'scan_results'
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(Integer, ForeignKey('devices.id'))
+    scan_type = Column(String, nullable=False)  # 'port_scan' or 'os_scan'
+    target_ip = Column(String, nullable=False)
+    scan_time = Column(DateTime, default=datetime.datetime.utcnow)
+    scan_duration = Column(Integer)  # Duration in seconds
+    ports = Column(JSON, nullable=True)  # Port scan results
+    os_guesses = Column(JSON, nullable=True)  # OS detection guesses
+    os_details = Column(JSON, nullable=True)  # Detailed OS information
+    raw_output = Column(Text, nullable=True)  # Raw nmap output
+    command = Column(String, nullable=True)  # The nmap command executed
+    error = Column(Text, nullable=True)  # Error message if failed
+    status = Column(String, default='success')  # success, failed, running
+    
+    # ORM relationships
+    device = relationship('Device', backref='scan_results')
+
+class PortInfo(Base):
+    """
+    PortInfo model representing individual port information from port scans.
+
+    Fields:
+        id: Primary key.
+        scan_result_id: Foreign key to the related scan result.
+        port_number: Port number.
+        protocol: Protocol (tcp, udp).
+        state: Port state (open, closed, filtered).
+        service: Service name if detected.
+        version: Service version if detected.
+    """
+    __tablename__ = 'port_info'
+    id = Column(Integer, primary_key=True, index=True)
+    scan_result_id = Column(Integer, ForeignKey('scan_results.id'))
+    port_number = Column(Integer, nullable=False)
+    protocol = Column(String, nullable=False)  # 'tcp' or 'udp'
+    state = Column(String, nullable=False)  # 'open', 'closed', 'filtered'
+    service = Column(String, nullable=True)
+    version = Column(String, nullable=True)
+    
+    # ORM relationships
+    scan_result = relationship('ScanResult', backref='port_details') 
