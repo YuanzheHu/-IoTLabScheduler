@@ -59,8 +59,7 @@ services:
   # Streamlit UI for device dashboard
   streamlit:
     build: ./dashboard
-    ports:
-      - "8501:8501"
+    network_mode: host
     volumes:
       - ./dashboard:/app
     depends_on:
