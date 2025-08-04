@@ -5,7 +5,7 @@ from db.base import SessionLocal
 from db.models import Device
 from core.device_discovery import DeviceDiscovery
 import os
-from core.scan_engine import ScanEngine
+from core.scan_engine import ScanEngine, ScanType
 import ipaddress
 import asyncio
 import datetime
@@ -128,46 +128,187 @@ def get_device_by_mac(mac_address: str, db: Session = Depends(get_db)):
     device = db.query(Device).filter(Device.mac_address == mac_address).first()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    return device
+    
+    # 手动构建返回字典，确保Pydantic可以正确序列化
+    return {
+        "id": device.id,
+        "ip_address": device.ip_address,
+        "mac_address": device.mac_address,
+        "hostname": device.hostname,
+        "status": device.status,
+        "port": device.port,
+        "os_info": device.os_info,
+        "last_seen": device.last_seen
+    }
 
-@router.get("/ip/{ip}/portscan", response_model=dict)
-async def port_scan_device(
-    ip: str,
-    ports: str = "-",
-    fast_scan: bool = True,
-    db: Session = Depends(get_db)
-):
-    """Performs a port scan on the given device IP using nmap."""
+@router.get("/{ip}/portscan")
+async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, save_to_db: bool = True, db: Session = Depends(get_db)):
+    """执行端口扫描
+    
+    Args:
+        ip: 目标IP地址
+        ports: 要扫描的端口（可选，默认扫描常用端口）
+        fast_scan: 是否使用快速扫描模式
+        save_to_db: 是否保存结果到数据库
+        db: 数据库会话
+        
+    Returns:
+        Dict: 扫描结果
+    """
     try:
-        ipaddress.IPv4Address(ip)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid IPv4 address")
-    engine = ScanEngine()
-    result = await engine.port_scan(ip, ports=ports, fast_scan=fast_scan)
-    device = db.query(Device).filter(Device.ip_address == ip).first()
-    if device:
-        port_list = [p['port'].split('/')[0] for p in result.get('ports', [])]
-        device.port = ','.join(port_list)
-        db.commit()
-    return result
+        # 验证IP地址格式
+        ipaddress.ip_address(ip)
+        
+        # 查找对应的设备
+        device = db.query(Device).filter(Device.ip_address == ip).first()
+        
+        # 如果设备不存在，创建一个临时设备记录
+        if not device:
+            device = Device(
+                ip_address=ip,
+                mac_address=f"temp_{ip.replace('.', '_')}",
+                hostname=f"External Device {ip}",
+                status="online"
+            )
+            db.add(device)
+            db.commit()
+            db.refresh(device)
+        
+        device_id = device.id if device else None
+        
+        # 创建扫描引擎
+        scan_engine = ScanEngine()
+        
+        # 执行端口扫描
+        result = await scan_engine.scan_single_device(
+            target_ip=ip,
+            device_name=f"Device {ip}",
+            scan_type=ScanType.PORT_SCAN
+        )
+        
+        if result.error:
+            raise HTTPException(status_code=500, detail=f"Port scan failed: {result.error}")
+        
+        # 准备返回结果
+        scan_result = {
+            "ports": result.tcp_ports + result.udp_ports,
+            "raw_output": result.raw_output,
+            "scan_duration": result.scan_duration,
+            "total_tcp_ports": len(result.tcp_ports),
+            "total_udp_ports": len(result.udp_ports)
+        }
+        
+        # 保存到数据库
+        if save_to_db and device_id:
+            try:
+                from .scan_results import create_scan_result_internal
+                from .schemas import ScanResultCreate
+                
+                scan_result_data = ScanResultCreate(
+                    device_id=device_id,
+                    scan_type="port_scan",
+                    target_ip=ip,
+                    scan_duration=int(result.scan_duration),
+                    ports=scan_result["ports"],
+                    raw_output=result.raw_output,
+                    command=result.command,
+                    status="success"
+                )
+                
+                create_scan_result_internal(scan_result_data, db)
+            except Exception as e:
+                # 如果保存失败，记录错误但不影响扫描结果返回
+                print(f"Warning: Failed to save scan result to database: {e}")
+        
+        return scan_result
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid IP address format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Port scan failed: {str(e)}")
 
-@router.get("/ip/{ip}/oscan", response_model=dict)
-async def os_fingerprint_device(
-    ip: str,
-    fast_scan: bool = True,
-    ports: str = "22,80,443",
-    db: Session = Depends(get_db)
-):
-    """Performs OS fingerprinting on the given device IP using nmap."""
+@router.get("/{ip}/oscan")
+async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = True, save_to_db: bool = True, db: Session = Depends(get_db)):
+    """执行OS指纹识别
+    
+    Args:
+        ip: 目标IP地址
+        ports: 用于OS指纹识别的端口（默认：22,80,443）
+        fast_scan: 是否使用快速扫描模式
+        save_to_db: 是否保存结果到数据库
+        db: 数据库会话
+        
+    Returns:
+        Dict: OS扫描结果
+    """
     try:
-        ipaddress.IPv4Address(ip)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid IPv4 address")
-    engine = ScanEngine()
-    result = await engine.os_fingerprint(ip, fast_scan=fast_scan, ports=ports)
-    device = db.query(Device).filter(Device.ip_address == ip).first()
-    if device:
-        guesses = result.get('os_guesses', [])
-        device.os_info = guesses[0] if guesses else None
-        db.commit()
-    return result
+        # 验证IP地址格式
+        ipaddress.ip_address(ip)
+        
+        # 查找对应的设备
+        device = db.query(Device).filter(Device.ip_address == ip).first()
+        
+        # 如果设备不存在，创建一个临时设备记录
+        if not device:
+            device = Device(
+                ip_address=ip,
+                mac_address=f"temp_{ip.replace('.', '_')}",
+                hostname=f"External Device {ip}",
+                status="online"
+            )
+            db.add(device)
+            db.commit()
+            db.refresh(device)
+        
+        device_id = device.id if device else None
+        
+        # 创建扫描引擎
+        scan_engine = ScanEngine()
+        
+        # 执行OS扫描
+        result = await scan_engine.scan_single_device(
+            target_ip=ip,
+            device_name=f"Device {ip}",
+            scan_type=ScanType.OS_SCAN
+        )
+        
+        if result.error:
+            raise HTTPException(status_code=500, detail=f"OS scan failed: {result.error}")
+        
+        # 准备返回结果
+        scan_result = {
+            "os_guesses": result.os_info.get("os_guesses", []),
+            "os_details": result.os_info.get("os_details", {}),
+            "raw_output": result.raw_output,
+            "scan_duration": result.scan_duration
+        }
+        
+        # 保存到数据库
+        if save_to_db and device_id:
+            try:
+                from .scan_results import create_scan_result_internal
+                from .schemas import ScanResultCreate
+                
+                scan_result_data = ScanResultCreate(
+                    device_id=device_id,
+                    scan_type="os_scan",
+                    target_ip=ip,
+                    scan_duration=int(result.scan_duration),
+                    os_guesses=scan_result["os_guesses"],
+                    os_details=scan_result["os_details"],
+                    raw_output=result.raw_output,
+                    command=result.command,
+                    status="success"
+                )
+                
+                create_scan_result_internal(scan_result_data, db)
+            except Exception as e:
+                # 如果保存失败，记录错误但不影响扫描结果返回
+                print(f"Warning: Failed to save scan result to database: {e}")
+        
+        return scan_result
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid IP address format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OS scan failed: {str(e)}")

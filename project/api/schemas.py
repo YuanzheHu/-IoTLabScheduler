@@ -1,6 +1,6 @@
 from pydantic import BaseModel, validator, root_validator
 import ipaddress
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 # Device schemas
@@ -18,14 +18,12 @@ class DeviceBase(BaseModel):
         last_seen (Optional[datetime]): Last time the device was seen.
         extra_info (Optional[str]): Any additional information.
     """
-    ip_address: str
+    ip_address: Optional[str] = None
     mac_address: str
     hostname: Optional[str] = None
-    device_type: Optional[str] = None
-    os_info: Optional[str] = None
     status: Optional[str] = None
-    last_seen: Optional[datetime] = None
-    extra_info: Optional[str] = None
+    port: Optional[str] = None
+    os_info: Optional[str] = None
 
 class DeviceCreate(DeviceBase):
     """
@@ -42,8 +40,10 @@ class DeviceRead(DeviceBase):
         id (int): Unique identifier for the device.
     """
     id: int
+    last_seen: Optional[datetime] = None
+
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Capture schemas
 class CaptureBase(BaseModel):
@@ -60,8 +60,6 @@ class CaptureBase(BaseModel):
     """
     file_name: str
     file_path: str
-    created_at: Optional[datetime] = None
-    experiment_id: Optional[int] = None
     file_size: Optional[int] = None
     description: Optional[str] = None
 
@@ -70,7 +68,7 @@ class CaptureCreate(CaptureBase):
     Schema for creating a new capture.
     Inherits all fields from CaptureBase.
     """
-    pass
+    experiment_id: Optional[int] = None
 
 class CaptureRead(CaptureBase):
     """
@@ -80,8 +78,11 @@ class CaptureRead(CaptureBase):
         id (int): Unique identifier for the capture.
     """
     id: int
+    created_at: datetime
+    experiment_id: Optional[int] = None
+
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CaptureDeleteResponse(BaseModel):
     """
@@ -115,12 +116,7 @@ class ExperimentBase(BaseModel):
     attack_type: str
     target_ip: str
     port: Optional[int] = 55443
-    status: Optional[str] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    result: Optional[str] = None
-    capture_id: Optional[int] = None
-    duration_sec: int
+    duration_sec: Optional[int] = None
 
     @validator('target_ip')
     def validate_target_ip(cls, v):
@@ -153,7 +149,51 @@ class ExperimentRead(ExperimentBase):
         captures (Optional[List[CaptureRead]]): List of related captures.
     """
     id: int
-    capture: Optional[CaptureRead] = None
-    captures: Optional[List[CaptureRead]] = None
+    status: Optional[str] = None
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    result: Optional[str] = None
+    capture_id: Optional[int] = None
+
     class Config:
-        orm_mode = True 
+        from_attributes = True
+
+class ScanResultBase(BaseModel):
+    scan_type: str  # 'port_scan' or 'os_scan'
+    target_ip: str
+    scan_duration: Optional[int] = None
+    ports: Optional[List[Dict[str, Any]]] = None
+    os_guesses: Optional[List[str]] = None
+    os_details: Optional[Dict[str, Any]] = None
+    raw_output: Optional[str] = None
+    command: Optional[str] = None
+    error: Optional[str] = None
+    status: str = 'success'
+
+class ScanResultCreate(ScanResultBase):
+    device_id: int
+
+class ScanResultRead(ScanResultBase):
+    id: int
+    device_id: int
+    scan_time: datetime
+
+    class Config:
+        from_attributes = True
+
+class PortInfoBase(BaseModel):
+    port_number: int
+    protocol: str  # 'tcp' or 'udp'
+    state: str  # 'open', 'closed', 'filtered'
+    service: Optional[str] = None
+    version: Optional[str] = None
+
+class PortInfoCreate(PortInfoBase):
+    scan_result_id: int
+
+class PortInfoRead(PortInfoBase):
+    id: int
+    scan_result_id: int
+
+    class Config:
+        from_attributes = True 
