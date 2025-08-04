@@ -23,17 +23,19 @@ import time
 class TcpdumpUtil:
     """Utility class to manage tcpdump process for packet capture."""
 
-    def __init__(self, output_file='capture.pcap', interface='any', extra_args=None):
+    def __init__(self, output_file='capture.pcap', interface='any', extra_args=None, target_ip=None):
         """Initialize TcpdumpUtil.
         
         Args:
             output_file (str): Output file for captured packets
             interface (str): Network interface to capture on ('any' for all interfaces)
             extra_args (list): Additional tcpdump arguments
+            target_ip (str): Target IP address to filter for (optional)
         """
         self.output_file = output_file
         self.interface = interface
         self.extra_args = extra_args or []
+        self.target_ip = target_ip
         self.process = None
 
     def start(self):
@@ -47,9 +49,16 @@ class TcpdumpUtil:
             '-i', self.interface,
             '-w', self.output_file,
             '-s', '0',  # Capture full packet size
-            '-n',  # Don't resolve hostnames
-            '-v'   # Verbose output
+            '-n'  # Don't resolve hostnames
         ]
+        
+        # Add target IP filter if specified
+        if self.target_ip:
+            # Capture both directions: packets to/from the target IP
+            cmd.extend(['host', self.target_ip])
+        else:
+            # If no target IP, capture all traffic on the interface
+            cmd.extend(['-v'])  # Verbose output
         
         # Add extra arguments
         cmd.extend(self.extra_args)

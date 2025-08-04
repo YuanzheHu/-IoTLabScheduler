@@ -23,6 +23,7 @@ from celery.result import AsyncResult
 from api.devices import router as devices_router
 from api.experiments import router as experiments_router
 from api.captures import router as captures_router
+from api.scan_results import router as scan_results_router
 from db.base import Base, engine
 
 # Automatically create all database tables if the database file does not exist
@@ -32,10 +33,11 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Register API routers for devices, experiments, and captures
+# Register API routers for devices, experiments, captures, and scan results
 app.include_router(devices_router)
 app.include_router(experiments_router)
 app.include_router(captures_router)
+app.include_router(scan_results_router)
 
 logging.basicConfig(
     level=logging.INFO,
