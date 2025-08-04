@@ -98,7 +98,7 @@ def stop_attack_experiment(experiment_id):
             logger.info(f"Experiment {experiment_id} stopped successfully")
         else:
             logger.warning(f"Experiment {experiment_id} was not running or failed to stop")
-        
+                
         return result
     except Exception as e:
         logger.error(f"Failed to stop experiment {experiment_id}: {e}")
@@ -149,7 +149,7 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, port, duration,
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
         pcap_filename = f"exp_{experiment_id}_{safe_ip}_{timestamp}.pcap"
         pcap_path = os.path.join(pcap_dir, pcap_filename)
-        tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface)
+        tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface, target_ip=target_ip)
         tcpdump.start()
 
         # Step 3: Initialize the attack engine
@@ -227,7 +227,7 @@ def run_traffic_capture(experiment_id, target_ip, duration, interface="eth0"):
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
         pcap_filename = f"capture_{experiment_id}_{safe_ip}_{timestamp}.pcap"
         pcap_path = os.path.join(pcap_dir, pcap_filename)
-        tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface)
+        tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface, target_ip=target_ip)
         tcpdump.start()
         time.sleep(duration)
         tcpdump.stop()
