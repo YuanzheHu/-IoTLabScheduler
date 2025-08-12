@@ -148,10 +148,14 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
+data/
+*.json
+examples/
 logs/
 *.log
 .env.local
 .env.production
+notebook/
 
 # CSV files
 *.csv

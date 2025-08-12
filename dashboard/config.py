@@ -23,5 +23,3 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 API_URL = f"{API_BASE_URL}/devices"
 EXPERIMENTS_URL = f"{API_BASE_URL}/experiments"
 CAPTURES_URL = f"{API_BASE_URL}/captures" 
-API_URL = f"{API_BASE_URL}/devices"
-EXPERIMENTS_URL = f"{API_BASE_URL}/experiments"
