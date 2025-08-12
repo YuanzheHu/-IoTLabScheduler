@@ -1,6 +1,6 @@
 from pydantic import BaseModel, validator, root_validator
 import ipaddress
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 # Device schemas
@@ -18,14 +18,12 @@ class DeviceBase(BaseModel):
         last_seen (Optional[datetime]): Last time the device was seen.
         extra_info (Optional[str]): Any additional information.
     """
-    ip_address: str
+    ip_address: Optional[str] = None
     mac_address: str
     hostname: Optional[str] = None
-    device_type: Optional[str] = None
-    os_info: Optional[str] = None
     status: Optional[str] = None
-    last_seen: Optional[datetime] = None
-    extra_info: Optional[str] = None
+    port: Optional[str] = None
+    os_info: Optional[str] = None
 
 class DeviceCreate(DeviceBase):
     """
@@ -42,8 +40,10 @@ class DeviceRead(DeviceBase):
         id (int): Unique identifier for the device.
     """
     id: int
+    last_seen: Optional[datetime] = None
+
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Capture schemas
 class CaptureBase(BaseModel):
@@ -60,8 +60,6 @@ class CaptureBase(BaseModel):
     """
     file_name: str
     file_path: str
-    created_at: Optional[datetime] = None
-    experiment_id: Optional[int] = None
     file_size: Optional[int] = None
     description: Optional[str] = None
 
@@ -70,7 +68,7 @@ class CaptureCreate(CaptureBase):
     Schema for creating a new capture.
     Inherits all fields from CaptureBase.
     """
-    pass
+    experiment_id: Optional[int] = None
 
 class CaptureRead(CaptureBase):
     """
@@ -80,8 +78,11 @@ class CaptureRead(CaptureBase):
         id (int): Unique identifier for the capture.
     """
     id: int
+    created_at: datetime
+    experiment_id: Optional[int] = None
+
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CaptureDeleteResponse(BaseModel):
     """
@@ -115,12 +116,7 @@ class ExperimentBase(BaseModel):
     attack_type: str
     target_ip: str
     port: Optional[int] = 55443
-    status: Optional[str] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    result: Optional[str] = None
-    capture_id: Optional[int] = None
-    duration_sec: int
+    duration_sec: Optional[int] = None
 
     @validator('target_ip')
     def validate_target_ip(cls, v):
@@ -153,7 +149,122 @@ class ExperimentRead(ExperimentBase):
         captures (Optional[List[CaptureRead]]): List of related captures.
     """
     id: int
-    capture: Optional[CaptureRead] = None
-    captures: Optional[List[CaptureRead]] = None
+    status: Optional[str] = None
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    result: Optional[str] = None
+    capture_id: Optional[int] = None
+
     class Config:
-        orm_mode = True 
+        from_attributes = True
+
+# V2 Experiment schemas for Attack Engine V2
+class ExperimentCreateV2(ExperimentBase):
+    """
+    V2 Schema for creating a new experiment with Attack Engine V2 features.
+    
+    Additional fields:
+        interface (str): Network interface to use for attack (wlan0, eth0, any)
+        attack_mode (str): Attack mode - 'single' or 'cyclic'
+        cycles (int): Number of attack cycles for cyclic mode
+        settle_time_sec (int): Settle time between cycles in seconds
+    """
+    interface: str = "wlan0"
+    attack_mode: str = "single"  # 'single' or 'cyclic'
+    cycles: int = 1
+    settle_time_sec: int = 30
+
+    @validator('attack_mode')
+    def validate_attack_mode(cls, v):
+        if v not in ['single', 'cyclic']:
+            raise ValueError('attack_mode must be either "single" or "cyclic"')
+        return v
+
+    @validator('cycles')
+    def validate_cycles(cls, v):
+        if v < 1:
+            raise ValueError('cycles must be at least 1')
+        return v
+
+    @validator('settle_time_sec')
+    def validate_settle_time_sec(cls, v):
+        if v < 0:
+            raise ValueError('settle_time_sec must be non-negative')
+        return v
+
+class ExperimentReadV2(ExperimentBase):
+    """
+    V2 Schema for reading experiment information with Attack Engine V2 fields.
+    """
+    id: int
+    status: Optional[str] = None
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    result: Optional[str] = None
+    capture_id: Optional[int] = None
+    interface: Optional[str] = None
+    attack_mode: Optional[str] = None
+    cycles: Optional[int] = None
+    settle_time_sec: Optional[int] = None
+    current_cycle: Optional[int] = None
+    total_cycles: Optional[int] = None
+    attack_results: Optional[str] = None  # JSON string
+
+    class Config:
+        from_attributes = True
+
+class ExperimentStatusV2(BaseModel):
+    """
+    V2 Schema for experiment status response.
+    """
+    id: int
+    name: str
+    status: str
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    result: Optional[str] = None
+    attack_mode: Optional[str] = None
+    current_cycle: Optional[int] = None
+    total_cycles: Optional[int] = None
+    progress_percentage: Optional[float] = None
+    estimated_remaining_time: Optional[int] = None  # in seconds
+
+class ScanResultBase(BaseModel):
+    scan_type: str  # 'port_scan' or 'os_scan'
+    target_ip: str
+    scan_duration: Optional[int] = None
+    ports: Optional[List[Dict[str, Any]]] = None
+    os_guesses: Optional[List[str]] = None
+    os_details: Optional[Dict[str, Any]] = None
+    raw_output: Optional[str] = None
+    command: Optional[str] = None
+    error: Optional[str] = None
+    status: str = 'success'
+
+class ScanResultCreate(ScanResultBase):
+    device_id: int
+
+class ScanResultRead(ScanResultBase):
+    id: int
+    device_id: int
+    scan_time: datetime
+
+    class Config:
+        from_attributes = True
+
+class PortInfoBase(BaseModel):
+    port_number: int
+    protocol: str  # 'tcp' or 'udp'
+    state: str  # 'open', 'closed', 'filtered'
+    service: Optional[str] = None
+    version: Optional[str] = None
+
+class PortInfoCreate(PortInfoBase):
+    scan_result_id: int
+
+class PortInfoRead(PortInfoBase):
+    id: int
+    scan_result_id: int
+
+    class Config:
+        from_attributes = True 

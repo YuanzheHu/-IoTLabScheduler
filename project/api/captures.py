@@ -29,7 +29,21 @@ def list_captures(
         query = query.filter(Capture.created_at >= start_time)
     if end_time:
         query = query.filter(Capture.created_at <= end_time)
-    return query.order_by(Capture.created_at.desc()).all()
+    captures = query.order_by(Capture.created_at.desc()).all()
+    
+    # 手动构建返回字典，确保Pydantic可以正确序列化
+    result = []
+    for capture in captures:
+        result.append({
+            "id": capture.id,
+            "file_name": capture.file_name,
+            "file_path": capture.file_path,
+            "file_size": capture.file_size,
+            "description": capture.description,
+            "created_at": capture.created_at,
+            "experiment_id": capture.experiment_id
+        })
+    return result
 
 @router.get("/device/{mac_address}", response_model=List[CaptureRead])
 def get_device_captures(mac_address: str, db: Session = Depends(get_db)):
@@ -44,7 +58,20 @@ def get_device_captures(mac_address: str, db: Session = Depends(get_db)):
     if not experiment_ids:
         return []
     captures = db.query(Capture).filter(Capture.experiment_id.in_(experiment_ids)).order_by(Capture.created_at.desc()).all()
-    return captures
+    
+    # 手动构建返回字典，确保Pydantic可以正确序列化
+    result = []
+    for capture in captures:
+        result.append({
+            "id": capture.id,
+            "file_name": capture.file_name,
+            "file_path": capture.file_path,
+            "file_size": capture.file_size,
+            "description": capture.description,
+            "created_at": capture.created_at,
+            "experiment_id": capture.experiment_id
+        })
+    return result
 
 @router.get("/{capture_id}/download")
 def download_capture(capture_id: int, db: Session = Depends(get_db)):
