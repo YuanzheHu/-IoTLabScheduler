@@ -1,12 +1,59 @@
+"""
+Settings Management Page
+System configuration and maintenance for IoT Lab Scheduler
+"""
+
 import streamlit as st
 import subprocess
 import sys
 import os
+from typing import Optional
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.icon_fix import apply_icon_fixes
 
-st.set_page_config(page_title="Settings")
+
+def reset_database() -> tuple[bool, str, Optional[str]]:
+    """
+    Reset the database by running the init_db command
+    
+    Returns:
+        tuple[bool, str, Optional[str]]: (success, message, output/error)
+    """
+    try:
+        result = subprocess.run(
+            ["python3", "-m", "project.db.init_db"],
+            capture_output=True,
+            text=True,
+            cwd=os.getcwd(),
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            return True, "Database reset successful!", result.stdout
+        else:
+            return False, f"Database reset failed with code {result.returncode}", result.stderr
+            
+    except subprocess.TimeoutExpired:
+        return False, "Database reset timed out!", None
+    except FileNotFoundError:
+        return False, "python3 command or project.db.init_db module not found!", None
+    except Exception as e:
+        return False, f"Error during reset: {str(e)}", None
+
+
+# Page configuration
+st.set_page_config(
+    page_title="Settings",
+    page_icon="⚙️",
+    layout="wide"
+)
+
 st.title("⚙️ Settings")
 
-# 导入配置
+# Apply icon fixes
+apply_icon_fixes()
+
+# Import configuration
 try:
     from config import API_URL, EXPERIMENTS_URL, CAPTURES_URL
 except ImportError:
@@ -14,7 +61,7 @@ except ImportError:
     EXPERIMENTS_URL = "http://localhost:8000/experiments"
     CAPTURES_URL = "http://localhost:8000/captures"
 
-# 系统信息
+# System information
 st.markdown("## 📊 System Information")
 col1, col2 = st.columns(2)
 
@@ -29,129 +76,115 @@ with col2:
     st.code(f"Python: {sys.version}")
     st.code(f"Working Dir: {os.getcwd()}")
 
-# 数据库管理
+# Database management
 st.markdown("## 🗄️ Database Management")
 
 with st.expander("⚠️ Database Reset", expanded=False):
     st.warning("""
-    **⚠️ 警告：此操作将重置整个数据库！**
+    **⚠️ Warning: This operation will reset the entire database!**
     
-    - 所有设备信息将被清除
-    - 所有扫描结果将被删除
-    - 所有实验记录将被清除
-    - 所有PCAP文件记录将被删除
+    - All device information will be cleared
+    - All scan results will be deleted
+    - All experiment records will be cleared
+    - All PCAP file records will be deleted
     
-    此操作不可逆，请谨慎使用！
+    This operation is irreversible, please use with caution!
     """)
     
-    # 确认重置
+    # Confirm reset
     if st.button("🗑️ Reset Database", type="primary", use_container_width=True):
-        st.info("正在重置数据库...")
+        st.info("Resetting database...")
         
-        try:
-            # 执行数据库重置命令
-            result = subprocess.run(
-                ["python3", "-m", "project.db.init_db"],
-                capture_output=True,
-                text=True,
-                cwd=os.getcwd(),
-                timeout=30
-            )
+        success, message, output = reset_database()
+        
+        if success:
+            st.success(f"✅ {message}")
+            if output:
+                st.code(output)
             
-            if result.returncode == 0:
-                st.success("✅ 数据库重置成功！")
-                st.code(result.stdout)
-                
-                # 显示重置后的信息
-                st.info("""
-                **重置完成：**
-                - 数据库表已重新创建
-                - 所有数据已清除
-                - 系统已准备就绪
-                
-                建议刷新页面以查看最新状态。
-                """)
-            else:
-                st.error("❌ 数据库重置失败！")
-                st.error(f"错误代码: {result.returncode}")
-                st.code(result.stderr)
-                
-        except subprocess.TimeoutExpired:
-            st.error("❌ 数据库重置超时！")
-        except FileNotFoundError:
-            st.error("❌ 找不到python3命令或project.db.init_db模块！")
-        except Exception as e:
-            st.error(f"❌ 重置过程中发生错误: {str(e)}")
+            # Show reset completion info
+            st.info("""
+            **Reset Complete:**
+            - Database tables have been recreated
+            - All data has been cleared
+            - System is ready
+            
+            Recommended to refresh the page to see the latest status.
+            """)
+        else:
+            st.error(f"❌ {message}")
+            if output:
+                st.code(output)
 
-# 系统维护
+# System maintenance
 st.markdown("## 🔧 System Maintenance")
 
 with st.expander("🧹 System Cleanup", expanded=False):
     st.info("""
-    **系统清理功能：**
-    - 清理临时文件
-    - 清理日志文件
-    - 优化数据库
+    **System cleanup features:**
+    - Clean temporary files
+    - Clean log files
+    - Optimize database
     """)
     
     col1, col2 = st.columns(2)
     
     with col1:
         if st.button("🧹 Clean Temp Files", use_container_width=True):
-            st.info("清理临时文件功能开发中...")
+            st.info("Clean temporary files feature is under development...")
     
     with col2:
         if st.button("📊 Optimize Database", use_container_width=True):
-            st.info("数据库优化功能开发中...")
+            st.info("Database optimization feature is under development...")
 
-# 配置管理
+# Configuration management
 st.markdown("## ⚙️ Configuration")
 
 with st.expander("🔧 API Configuration", expanded=False):
-    st.info("当前API配置：")
+    st.info("Current API configuration:")
     
-    api_url = st.text_input("API Base URL", value=API_URL, help="API服务器地址")
-    experiments_url = st.text_input("Experiments API URL", value=EXPERIMENTS_URL, help="实验API地址")
-    captures_url = st.text_input("Captures API URL", value=CAPTURES_URL, help="捕获API地址")
+    api_url = st.text_input("API Base URL", value=API_URL, help="API server address")
+    experiments_url = st.text_input("Experiments API URL", value=EXPERIMENTS_URL, help="Experiments API address")
+    captures_url = st.text_input("Captures API URL", value=CAPTURES_URL, help="Captures API address")
     
     if st.button("💾 Save Configuration", use_container_width=True):
-        st.success("配置保存功能开发中...")
+        st.success("Configuration save feature is under development...")
 
-# 日志查看
+# Log viewing
 st.markdown("## 📋 System Logs")
 
 with st.expander("📄 View Logs", expanded=False):
-    st.info("系统日志查看功能开发中...")
+    st.info("System log viewing feature is under development...")
     
-    log_type = st.selectbox("日志类型", ["Application", "Database", "API", "All"])
+    log_type = st.selectbox("Log Type", ["Application", "Database", "API", "All"])
     
     if st.button("📋 Load Logs", use_container_width=True):
-        st.info("日志加载功能开发中...")
+        st.info("Log loading feature is under development...")
 
-# 帮助信息
+# Help information
 st.markdown("## ❓ Help & Support")
 
 with st.expander("📚 Documentation", expanded=False):
     st.markdown("""
-    **系统文档：**
+    **System Documentation:**
     
-    ### 数据库重置
-    - 执行 `python3 -m project.db.init_db` 命令
-    - 清除所有现有数据
-    - 重新创建数据库表结构
+    ### Database Reset
+    - Execute `python3 -m project.db.init_db` command
+    - Clear all existing data
+    - Recreate database table structure
     
-    ### API端点
-    - 设备管理: `/devices`
-    - 实验管理: `/experiments`
-    - 捕获管理: `/captures`
-    - 扫描结果: `/scan-results`
+    ### API Endpoints
+    - Device Management: `/devices`
+    - Experiment Management: `/experiments`
+    - Capture Management: `/captures`
+    - Scan Results: `/scan-results`
     
-    ### 故障排除
-    - 检查Docker容器状态
-    - 查看API服务日志
-    - 验证网络连接
+    ### Troubleshooting
+    - Check Docker container status
+    - View API service logs
+    - Verify network connectivity
     """)
 
-# 页脚
+# Footer
 st.markdown("---")
 st.caption("IoTLabScheduler - System Settings") 

@@ -1,15 +1,31 @@
+"""
+Devices Management Page
+Manages and displays IoT devices discovered through network scanning
+"""
+
 import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime
+from typing import List, Dict, Optional
 
-def fetch_devices_from_db():
+
+def fetch_devices_from_db() -> List[Dict]:
+    """
+    Fetch devices from the database
+    
+    Returns:
+        List[Dict]: List of device data
+    """
     try:
         from config import API_URL
     except ImportError:
         API_URL = "http://localhost:8000/devices"
+    
     try:
-        resp = requests.get(API_URL, timeout=30)
+        # Add trailing slash to avoid 307 redirect
+        api_url = API_URL if API_URL.endswith('/') else f"{API_URL}/"
+        resp = requests.get(api_url, timeout=30)
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.HTTPError as e:
@@ -19,17 +35,40 @@ def fetch_devices_from_db():
         st.error(f"Failed to fetch devices from database: {e}")
         return []
 
-def fetch_devices_scan(subnet):
+
+def fetch_devices_scan(subnet: str) -> List[Dict]:
+    """
+    Scan for devices in the specified subnet
+    
+    Args:
+        subnet (str): Subnet to scan (e.g., "192.168.1.0/24")
+        
+    Returns:
+        List[Dict]: List of discovered devices
+    """
     try:
         from config import API_URL
     except ImportError:
         API_URL = "http://localhost:8000/devices"
+    
     try:
-        scan_url = f"{API_URL}/scan"
+        # Add trailing slash to avoid 307 redirect
+        api_url = API_URL if API_URL.endswith('/') else f"{API_URL}/"
+        scan_url = f"{api_url}scan"
         payload = {"subnet": subnet}
-        resp = requests.post(scan_url, json=payload, timeout=300)  # 增加超时时间到5分钟
-        resp.raise_for_status()
-        return resp.json()
+        # Increase timeout to 5 minutes for network scanning
+        resp = requests.post(scan_url, json=payload, timeout=300)
+        
+        if resp.status_code == 200:
+            return resp.json()
+        elif resp.status_code == 500:
+            error_detail = resp.json().get('detail', 'Unknown error')
+            st.error(f"Backend scan error: {error_detail}")
+            return []
+        else:
+            st.error(f"HTTP error: {resp.status_code} - {resp.text}")
+            return []
+            
     except requests.exceptions.HTTPError as e:
         st.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
         return []
@@ -37,12 +76,29 @@ def fetch_devices_scan(subnet):
         st.error(f"Failed to scan devices: {e}")
         return []
 
-def sort_devices_by_status(devices):
+
+def sort_devices_by_status(devices: List[Dict]) -> List[Dict]:
+    """
+    Sort devices by status (online first, then offline)
+    
+    Args:
+        devices (List[Dict]): List of devices to sort
+        
+    Returns:
+        List[Dict]: Sorted list of devices
+    """
     online_devices = [d for d in devices if d.get('status') == 'online']
     offline_devices = [d for d in devices if d.get('status') != 'online']
     return online_devices + offline_devices
 
-def display_devices_compact(devices):
+
+def display_devices_compact(devices: List[Dict]) -> None:
+    """
+    Display devices in a compact card layout
+    
+    Args:
+        devices (List[Dict]): List of devices to display
+    """
     st.markdown("""
     <style>
     .device-card {
@@ -73,13 +129,21 @@ def display_devices_compact(devices):
     }
     </style>
     """, unsafe_allow_html=True)
+    
     cols = st.columns(4)
     for i, device in enumerate(devices):
         col_idx = i % 4
         with cols[col_idx]:
             show_device_card_compact(device)
 
-def show_device_card_compact(device):
+
+def show_device_card_compact(device: Dict) -> None:
+    """
+    Display a single device card in compact format
+    
+    Args:
+        device (Dict): Device data to display
+    """
     with st.container():
         hostname = device.get('hostname', 'Unknown Device')
         status = device.get('status', 'unknown')
@@ -87,6 +151,7 @@ def show_device_card_compact(device):
         ip = device.get('ip_address', '--')
         display_name = hostname[:20] + "..." if len(hostname) > 20 else hostname
         device_info_page = "pages/_device_info.py"
+        
         if status == 'online':
             if st.button(f"🟢 **{display_name}**", key=f"device_{mac}", use_container_width=True):
                 st.session_state["selected_mac"] = mac
@@ -95,84 +160,112 @@ def show_device_card_compact(device):
             if st.button(f"🔴 **{display_name}**", key=f"device_{mac}", use_container_width=True):
                 st.session_state["selected_mac"] = mac
                 st.switch_page(device_info_page)
+        
         st.caption(f"📱 `{mac}`")
         st.caption(f"🌐 {ip}")
         st.markdown("<br>", unsafe_allow_html=True)
 
-def filter_devices(devices, search_term):
+
+def filter_devices(devices: List[Dict], search_term: str) -> List[Dict]:
+    """
+    Filter devices by search term
+    
+    Args:
+        devices (List[Dict]): List of devices to filter
+        search_term (str): Search term to filter by
+        
+    Returns:
+        List[Dict]: Filtered list of devices
+    """
     if not search_term:
         return devices
+    
     filtered = []
     search_lower = search_term.lower()
+    
     for device in devices:
-        if (search_lower in device.get('mac_address', '').lower() or
-            search_lower in device.get('hostname', '').lower() or
-            search_lower in device.get('ip_address', '').lower()):
+        hostname = device.get('hostname', '').lower()
+        mac = device.get('mac_address', '').lower()
+        ip = device.get('ip_address', '').lower()
+        
+        if (search_lower in hostname or 
+            search_lower in mac or 
+            search_lower in ip):
             filtered.append(device)
+    
     return filtered
 
-# =================== UI 逻辑 ===================
 
-st.set_page_config(page_title="Devices")
-st.title("📱 Devices")
+# Main page content
+st.set_page_config(page_title="Devices", layout="wide")
+st.title("📱 IoT Devices")
 
-# 移除 show_device_details 相关逻辑
-if st.session_state.get('show_device_details', False):
-    pass  # 详情页已迁移到 device_info.py
+# Device management controls
+col1, col2 = st.columns([3, 1])
 
-# Scan configuration
-col1, col2, col3 = st.columns([3, 1, 1])
 with col1:
-    subnet = st.text_input(
-        "Subnet to scan",
-        value="193.60.241.96/27",
-        help="Enter subnet in CIDR notation (e.g., 193.60.241.96/27 for current network)"
+    st.markdown("### 🔍 Device Discovery")
+    subnet_input = st.text_input(
+        "Enter subnet to scan (e.g., 10.12.0.0/24):",
+        value="10.12.0.0/24",
+        help="Specify the network subnet to scan for IoT devices"
     )
+
 with col2:
-    scan_button = st.button("🔍 Scan", type="primary")
-with col3:
-    auto_scan = st.checkbox("Auto scan", value=False)
+    st.markdown("### ⚡ Actions")
+    if st.button("🔍 Scan Network", use_container_width=True):
+        try:
+            discovered_devices = fetch_devices_scan(subnet_input)
+            if discovered_devices and len(discovered_devices) > 0:
+                st.success(f"Found {len(discovered_devices)} devices!")
+                st.session_state["devices"] = discovered_devices
+            else:
+                st.warning("No devices found or scan failed")
+        except Exception as e:
+            st.error(f"Scan failed: {str(e)}")
+            st.info("Please check the backend logs for more details")
 
-# Trigger scan from sidebar
-if st.session_state.get('trigger_scan', False):
-    scan_button = True
-    st.session_state['trigger_scan'] = False
+# Search and filter
+search_term = st.text_input(
+    "🔍 Search devices:",
+    placeholder="Search by hostname, MAC, or IP...",
+    help="Filter devices by hostname, MAC address, or IP address"
+)
 
-# Always fetch devices on page load or refresh
-devices = []
-if scan_button or auto_scan:
-    with st.spinner("Scanning network..."):
-        devices = fetch_devices_scan(subnet)
-        st.session_state['devices'] = devices
-else:
-    with st.spinner("Loading devices..."):
+# Fetch and display devices
+if "devices" not in st.session_state:
+    with st.spinner("Loading devices from database..."):
         devices = fetch_devices_from_db()
-        st.session_state['devices'] = devices
+        st.session_state["devices"] = devices
+else:
+    devices = st.session_state["devices"]
 
-# Sort devices: online first, then offline
-devices = sort_devices_by_status(devices)
+# Filter devices by search term
+filtered_devices = filter_devices(devices, search_term)
 
-# Show device count
-if devices:
-    online_count = sum(1 for d in devices if d.get('status') == 'online')
-    total_count = len(devices)
-    st.success(f"Found {total_count} devices ({online_count} online, {total_count - online_count} offline)")
+# Sort devices by status (online first)
+sorted_devices = sort_devices_by_status(filtered_devices)
 
-# Search functionality
-search = st.text_input("🔍 Search devices", placeholder="Search by MAC, name, or IP")
-if search:
-    devices = filter_devices(devices, search)
-
-# Display devices in a more compact layout
-if devices:
-    # 分页参数
+# Display device count
+if filtered_devices:
+    online_count = len([d for d in filtered_devices if d.get('status') == 'online'])
+    total_count = len(filtered_devices)
+    
+    st.markdown(f"### 📋 Device List ({total_count} total, {online_count} online)")
+    
+    # Pagination
     DEVICES_PER_PAGE = 12
-    total_pages = (len(devices) + DEVICES_PER_PAGE - 1) // DEVICES_PER_PAGE
+    total_pages = (len(sorted_devices) + DEVICES_PER_PAGE - 1) // DEVICES_PER_PAGE
     page = st.session_state.get('devices_page', 1)
-    page = st.number_input('Page', min_value=1, max_value=total_pages, value=page, step=1, key='devices_page', format='%d')
+    page = st.number_input('Page', min_value=1, max_value=max(1, total_pages), value=page, step=1, key='devices_page', format='%d')
+    
     start_idx = (page - 1) * DEVICES_PER_PAGE
     end_idx = start_idx + DEVICES_PER_PAGE
-    display_devices_compact(devices[start_idx:end_idx])
+    page_devices = sorted_devices[start_idx:end_idx]
+    
+    # Display devices in compact format with pagination
+    display_devices_compact(page_devices)
     st.caption(f"Page {page} of {total_pages}")
+    
 else:
-    st.info("No devices found. Click 'Scan' to discover devices on your network.") 
+    st.info("🔍 No devices found. Use the scan button to discover devices on your network.") 
