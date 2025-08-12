@@ -58,15 +58,14 @@ def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
             normalized_mac = DeviceDiscovery.normalize_mac(mac)
             if normalized_mac not in mac_to_device:
                 db.add(Device(mac_address=normalized_mac, hostname=name, status='offline', ip_address=''))
-        db.commit()
-
+        
         # 2. Update DB: set all known devices offline by default
         for device in db.query(Device).all():
             device.status = 'offline'
             device.ip_address = ''
-        db.commit()
-
+        
         # 3. Update DB: set scanned/online devices
+        updated_count = 0
         for device_info in identified_devices:
             if not device_info['IP']:
                 continue  # Only update online devices here
@@ -78,6 +77,7 @@ def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
                 device.hostname = device_info['Name']
                 device.status = 'online'
                 device.last_seen = datetime.datetime.utcnow()
+                updated_count += 1
             else:
                 db.add(Device(
                     ip_address=device_info['IP'],
@@ -86,6 +86,9 @@ def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
                     status='online',
                     last_seen=datetime.datetime.utcnow()
                 ))
+                updated_count += 1
+        
+        # Commit all changes at once
         db.commit()
 
         # 4. Return all devices (online and offline)
@@ -201,7 +204,7 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
         # 保存到数据库
         if save_to_db and device_id:
             try:
-                from .scan_results import create_scan_result_internal
+                from .scan_results import create_scan_result_internal, update_or_create_scan_result
                 from .schemas import ScanResultCreate
                 
                 scan_result_data = ScanResultCreate(
@@ -215,7 +218,8 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
                     status="success"
                 )
                 
-                create_scan_result_internal(scan_result_data, db)
+                # 使用更新或创建函数，确保一个设备只有一个扫描结果
+                update_or_create_scan_result(scan_result_data, db)
             except Exception as e:
                 # 如果保存失败，记录错误但不影响扫描结果返回
                 print(f"Warning: Failed to save scan result to database: {e}")
@@ -286,7 +290,7 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
         # 保存到数据库
         if save_to_db and device_id:
             try:
-                from .scan_results import create_scan_result_internal
+                from .scan_results import create_scan_result_internal, update_or_create_scan_result
                 from .schemas import ScanResultCreate
                 
                 scan_result_data = ScanResultCreate(
@@ -301,7 +305,8 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
                     status="success"
                 )
                 
-                create_scan_result_internal(scan_result_data, db)
+                # 使用更新或创建函数，确保一个设备只有一个扫描结果
+                update_or_create_scan_result(scan_result_data, db)
             except Exception as e:
                 # 如果保存失败，记录错误但不影响扫描结果返回
                 print(f"Warning: Failed to save scan result to database: {e}")

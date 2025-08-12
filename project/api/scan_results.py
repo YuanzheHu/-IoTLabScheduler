@@ -5,6 +5,7 @@ from db.base import SessionLocal
 from db.models import ScanResult, PortInfo, Device
 from .schemas import ScanResultCreate, ScanResultRead, PortInfoCreate, PortInfoRead
 import datetime
+from sqlalchemy import text
 
 router = APIRouter(prefix="/scan-results", tags=["scan-results"])
 
@@ -47,6 +48,42 @@ def create_scan_result_internal(scan_result: ScanResultCreate, db: Session):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create scan result: {str(e)}")
+
+def update_or_create_scan_result(scan_result: ScanResultCreate, db: Session):
+    """
+    Update existing scan result for a device or create new one if none exists.
+    This ensures one device has only one scan result per scan type.
+    """
+    try:
+        # 查找该设备是否已有相同类型的扫描结果
+        existing_result = db.query(ScanResult).filter(
+            ScanResult.device_id == scan_result.device_id,
+            ScanResult.scan_type == scan_result.scan_type
+        ).first()
+        
+        if existing_result:
+            # 更新现有记录
+            existing_result.target_ip = scan_result.target_ip
+            existing_result.scan_duration = scan_result.scan_duration
+            existing_result.ports = scan_result.ports
+            existing_result.os_guesses = scan_result.os_guesses
+            existing_result.os_details = scan_result.os_details
+            existing_result.raw_output = scan_result.raw_output
+            existing_result.command = scan_result.command
+            existing_result.error = scan_result.error
+            existing_result.status = scan_result.status
+            existing_result.scan_time = datetime.datetime.utcnow()  # 更新时间戳
+            
+            db.commit()
+            db.refresh(existing_result)
+            return existing_result
+        else:
+            # 创建新记录
+            return create_scan_result_internal(scan_result, db)
+            
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update/create scan result: {str(e)}")
 
 @router.post("/", response_model=ScanResultRead)
 def create_scan_result(scan_result: ScanResultCreate, db: Session = Depends(get_db)):
@@ -146,92 +183,125 @@ def get_device_scan_results(
 @router.get("/device/{device_id}/latest", response_model=ScanResultRead)
 def get_latest_scan_result(
     device_id: int,
-    scan_type: str = Query(..., description="Scan type (port_scan or os_scan)"),
+    scan_type: str = Query(..., description="Scan type (port_scan, os_scan)"),
     db: Session = Depends(get_db)
 ):
     """Get the latest scan result for a specific device and scan type."""
     try:
-        # 验证设备是否存在
-        device = db.query(Device).filter(Device.id == device_id).first()
-        if not device:
-            raise HTTPException(status_code=404, detail="Device not found")
-        
-        scan_result = db.query(ScanResult).filter(
+        result = db.query(ScanResult).filter(
             ScanResult.device_id == device_id,
             ScanResult.scan_type == scan_type
         ).order_by(ScanResult.scan_time.desc()).first()
         
-        if not scan_result:
+        if not result:
             raise HTTPException(status_code=404, detail="No scan result found for this device and scan type")
         
-        # 手动构建返回字典，确保Pydantic可以正确序列化
         return {
-            "id": scan_result.id,
-            "device_id": scan_result.device_id,
-            "scan_type": scan_result.scan_type,
-            "target_ip": scan_result.target_ip,
-            "scan_time": scan_result.scan_time,
-            "scan_duration": scan_result.scan_duration,
-            "ports": scan_result.ports,
-            "os_guesses": scan_result.os_guesses,
-            "os_details": scan_result.os_details,
-            "raw_output": scan_result.raw_output,
-            "command": scan_result.command,
-            "error": scan_result.error,
-            "status": scan_result.status
+            "id": result.id,
+            "device_id": result.device_id,
+            "scan_type": result.scan_type,
+            "target_ip": result.target_ip,
+            "scan_time": result.scan_time,
+            "scan_duration": result.scan_duration,
+            "ports": result.ports,
+            "os_guesses": result.os_guesses,
+            "os_details": result.os_details,
+            "raw_output": result.raw_output,
+            "command": result.command,
+            "error": result.error,
+            "status": result.status
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get latest scan result: {str(e)}")
 
-@router.delete("/{scan_result_id}")
-def delete_scan_result(scan_result_id: int, db: Session = Depends(get_db)):
-    """Delete a scan result."""
+@router.delete("/cleanup-duplicates")
+def cleanup_duplicate_scan_results(db: Session = Depends(get_db)):
+    """
+    Clean up duplicate scan results, keeping only the latest one for each device and scan type.
+    This ensures one device has only one scan result per scan type.
+    """
     try:
-        scan_result = db.query(ScanResult).filter(ScanResult.id == scan_result_id).first()
-        if not scan_result:
-            raise HTTPException(status_code=404, detail="Scan result not found")
+        # 查找所有重复的扫描结果
+        duplicates = db.execute("""
+            WITH ranked_results AS (
+                SELECT 
+                    id,
+                    device_id,
+                    scan_type,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY device_id, scan_type 
+                        ORDER BY scan_time DESC
+                    ) as rn
+                FROM scan_results
+            )
+            SELECT id FROM ranked_results WHERE rn > 1
+        """).fetchall()
         
-        db.delete(scan_result)
+        if not duplicates:
+            return {"message": "No duplicate scan results found", "deleted_count": 0}
+        
+        # 删除重复的记录
+        duplicate_ids = [row[0] for row in duplicates]
+        deleted_count = db.query(ScanResult).filter(ScanResult.id.in_(duplicate_ids)).delete()
         db.commit()
         
-        return {"message": "Scan result deleted successfully"}
+        return {
+            "message": f"Successfully cleaned up {deleted_count} duplicate scan results",
+            "deleted_count": deleted_count,
+            "deleted_ids": duplicate_ids
+        }
+        
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete scan result: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup duplicate scan results: {str(e)}")
 
 @router.get("/stats/summary")
-def get_scan_stats(db: Session = Depends(get_db)):
-    """Get scan statistics summary."""
+def get_scan_results_summary(db: Session = Depends(get_db)):
+    """Get summary statistics of scan results."""
     try:
-        # 总扫描次数
-        total_scans = db.query(ScanResult).count()
+        # 总扫描结果数
+        total_results = db.query(ScanResult).count()
         
-        # 按类型统计
-        port_scans = db.query(ScanResult).filter(ScanResult.scan_type == "port_scan").count()
-        os_scans = db.query(ScanResult).filter(ScanResult.scan_type == "os_scan").count()
+        # 按扫描类型统计
+        type_stats = db.execute(text("""
+            SELECT 
+                scan_type,
+                COUNT(*) as count,
+                COUNT(DISTINCT device_id) as unique_devices
+            FROM scan_results 
+            GROUP BY scan_type
+        """)).fetchall()
         
-        # 按状态统计
-        successful_scans = db.query(ScanResult).filter(ScanResult.status == "success").count()
-        failed_scans = db.query(ScanResult).filter(ScanResult.status == "failed").count()
-        
-        # 平均扫描时间
-        avg_duration = db.query(ScanResult.scan_duration).filter(
-            ScanResult.scan_duration.isnot(None)
-        ).all()
-        avg_duration = sum([d[0] for d in avg_duration]) / len(avg_duration) if avg_duration else 0
-        
-        # 最近24小时的扫描
-        yesterday = datetime.datetime.utcnow() - datetime.timedelta(days=1)
-        recent_scans = db.query(ScanResult).filter(ScanResult.scan_time >= yesterday).count()
+        # 按设备统计
+        device_stats = db.execute(text("""
+            SELECT 
+                device_id,
+                COUNT(*) as scan_count,
+                MAX(scan_time) as last_scan_time
+            FROM scan_results 
+            GROUP BY device_id
+            ORDER BY scan_count DESC
+        """)).fetchall()
         
         return {
-            "total_scans": total_scans,
-            "port_scans": port_scans,
-            "os_scans": os_scans,
-            "successful_scans": successful_scans,
-            "failed_scans": failed_scans,
-            "avg_duration_seconds": round(avg_duration, 2),
-            "recent_24h_scans": recent_scans
+            "total_scan_results": total_results,
+            "scan_type_distribution": [
+                {
+                    "scan_type": row[0],
+                    "count": row[1],
+                    "unique_devices": row[2]
+                }
+                for row in type_stats
+            ],
+            "device_scan_summary": [
+                {
+                    "device_id": row[0],
+                    "scan_count": row[1],
+                    "last_scan_time": row[2].isoformat() if row[2] and hasattr(row[2], 'isoformat') else str(row[2]) if row[2] else None
+                }
+                for row in device_stats
+            ]
         }
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get scan stats: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to get scan results summary: {str(e)}") 

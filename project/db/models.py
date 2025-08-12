@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Float
 from sqlalchemy.orm import relationship
 from .base import Base
 
@@ -9,7 +9,7 @@ class Device(Base):
 
     Fields:
         id: Primary key.
-        ip_address: IP address of the device (nullable, not unique).
+        ip_address: IP address of the device (nullable for offline devices).
         mac_address: MAC address of the device (unique).
         hostname: Device name.
         status: Current status (e.g., online, offline).
@@ -19,7 +19,7 @@ class Device(Base):
     """
     __tablename__ = 'devices'
     id = Column(Integer, primary_key=True, index=True)
-    ip_address = Column(String, index=True, nullable=True, unique=False)  # nullable, not unique
+    ip_address = Column(String, index=True, nullable=True)  # 允许NULL，移除唯一性约束
     mac_address = Column(String, index=True, nullable=False, unique=True) # unique
     hostname = Column(String)
     status = Column(String)
@@ -66,6 +66,16 @@ class Experiment(Base):
         capture_id: Foreign key to the main capture file.
         capture: ORM relationship to the main Capture.
         captures: ORM relationship to all related captures.
+        
+        # New fields for Attack Engine V2
+        interface: Network interface to use for attack.
+        duration_sec: Duration of each attack cycle in seconds.
+        settle_time_sec: Settle time between cycles in seconds.
+        cycles: Number of attack cycles to perform.
+        attack_mode: Attack mode (single/cyclic).
+        current_cycle: Current cycle number during execution.
+        total_cycles: Total number of cycles for this experiment.
+        attack_results: JSON field storing detailed attack results.
     """
     __tablename__ = 'experiments'
     id = Column(Integer, primary_key=True, index=True)
@@ -79,6 +89,15 @@ class Experiment(Base):
     result = Column(Text)
     duration_sec = Column(Integer, nullable=True)
     capture_id = Column(Integer, ForeignKey('captures.id'))
+    
+    # New fields for Attack Engine V2
+    interface = Column(String, default="wlan0")
+    settle_time_sec = Column(Integer, default=30)
+    cycles = Column(Integer, default=1)
+    attack_mode = Column(String, default="single")  # single/cyclic
+    current_cycle = Column(Integer, default=0)
+    total_cycles = Column(Integer, default=1)
+    attack_results = Column(Text)  # JSON field for storing detailed results
 
     # ORM relationships
     capture = relationship('Capture', foreign_keys=[capture_id])
@@ -107,7 +126,7 @@ class ScanResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     device_id = Column(Integer, ForeignKey('devices.id'))
     scan_type = Column(String, nullable=False)  # 'port_scan' or 'os_scan'
-    target_ip = Column(String, nullable=False)
+    target_ip = Column(String, nullable=False)  # 移除唯一性约束，允许同一IP多次扫描
     scan_time = Column(DateTime, default=datetime.datetime.utcnow)
     scan_duration = Column(Integer)  # Duration in seconds
     ports = Column(JSON, nullable=True)  # Port scan results
@@ -145,3 +164,38 @@ class PortInfo(Base):
     
     # ORM relationships
     scan_result = relationship('ScanResult', backref='port_details') 
+
+class ShellScript(Base):
+    """Shell脚本模型"""
+    __tablename__ = 'shell_scripts'
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text)
+    script_content = Column(Text, nullable=False)
+    parameters_schema = Column(JSON)  # 解析出的参数结构
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    status = Column(String, default='active')  # active, inactive, deprecated
+    created_by = Column(String, default='system')  # 创建者
+    tags = Column(JSON)  # 标签数组
+    version = Column(String, default='1.0.0')  # 脚本版本
+
+class ScriptExecution(Base):
+    """脚本执行记录"""
+    __tablename__ = 'script_executions'
+    id = Column(Integer, primary_key=True, index=True)
+    script_id = Column(Integer, ForeignKey('shell_scripts.id'))
+    script_name = Column(String)  # 冗余字段，便于查询
+    parameters = Column(JSON)  # 用户填写的参数
+    status = Column(String, default='pending')  # pending, running, completed, failed, cancelled
+    start_time = Column(DateTime, default=datetime.datetime.utcnow)
+    end_time = Column(DateTime)
+    output = Column(Text)
+    error = Column(Text)
+    return_code = Column(Integer)
+    task_id = Column(String, index=True)  # Celery任务ID
+    execution_time_sec = Column(Float)  # 执行时长(秒)
+    created_by = Column(String, default='system')  # 执行者
+    
+    # ORM relationships
+    script = relationship('ShellScript', backref='executions') 
