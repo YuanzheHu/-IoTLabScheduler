@@ -1,71 +1,108 @@
 version: '3.8'
 
-services:
+# 定义通用配置
+x-common-config: &common-config
+  restart: unless-stopped
+  network_mode: host
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
 
+services:
   # FastAPI web application service
   web:
-    build: ./project
-    network_mode: host  # Use host network mode to access physical network
-    command: sh -c "mkdir -p /usr/src/app/logs && chmod -R 777 /usr/src/app/data && uvicorn main:app --host 0.0.0.0 --reload"  # Ensure logs dir, fix permissions, then start FastAPI
-    volumes:
-      - ./project:/usr/src/app  # Mount project source code for live reload
-      - ./project/data:/usr/src/app/data  # Mount data directory for persistent SQLite storage
+    <<: *common-config
+    build: 
+      context: ./project
+      dockerfile: Dockerfile
     environment:
-      - CELERY_BROKER_URL=redis://localhost:6379/0  # Celery broker URL for task queue (localhost in host mode)
-      - CELERY_RESULT_BACKEND=redis://localhost:6379/0  # Celery result backend
-    depends_on:
-      - redis  # Ensure Redis is started before web
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Allow access to host network
-    user: "0:0"
-
-  # Celery worker service for background task processing
-  worker:
-    build: ./project
-    network_mode: host
-    command: sh -c "mkdir -p /usr/src/app/logs && chmod -R 777 /usr/src/app/data && celery -A worker.celery worker --loglevel=info --logfile=logs/celery.log --concurrency=4 --hostname=worker@%h"
+      - SERVICE_TYPE=web
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=8000
+      - FASTAPI_RELOAD=true
+      - CELERY_BROKER_URL=redis://localhost:6379/0
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/0
+      - LOG_LEVEL=INFO
+      - LOG_DIR=/usr/src/app/logs
     volumes:
       - ./project:/usr/src/app
       - ./project/data:/usr/src/app/data
+      - ./project/logs:/usr/src/app/logs
+    depends_on:
+      - redis
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+  # Celery worker service
+  worker:
+    <<: *common-config
+    build: 
+      context: ./project
+      dockerfile: Dockerfile
     environment:
+      - SERVICE_TYPE=worker
       - CELERY_BROKER_URL=redis://localhost:6379/0
       - CELERY_RESULT_BACKEND=redis://localhost:6379/0
+      - CELERY_CONCURRENCY=8  # 从4增加到8
+      - LOG_LEVEL=INFO
+      - LOG_DIR=/usr/src/app/logs
       - TZ=Europe/London
+    volumes:
+      - ./project:/usr/src/app
+      - ./project/data:/usr/src/app/data
+      - ./project/logs:/usr/src/app/logs
     depends_on:
       - web
       - redis
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    user: "0:0"
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    privileged: true
 
-  # Flower dashboard for monitoring Celery tasks
-  dashboard:
-    build: ./project
-    network_mode: host
-    command: sh -c "mkdir -p /usr/src/app/logs && celery --broker=redis://localhost:6379/0 flower --port=5555 --log-file=logs/flower.log"  # Ensure logs dir, then start Flower and log to logs/flower.log
+  # Flower dashboard
+  flower:
+    <<: *common-config
+    build: 
+      context: ./project
+      dockerfile: Dockerfile
     environment:
-      - CELERY_BROKER_URL=redis://localhost:6379/0  # Celery broker URL
-      - CELERY_RESULT_BACKEND=redis://localhost:6379/0  # Celery result backend
-    depends_on:
-      - web     # Wait for web service
-      - redis   # Wait for Redis
-      - worker  # Wait for worker
-    extra_hosts:
-      - "host.docker.internal:host-gateway"  # Allow access to host network
+      - SERVICE_TYPE=flower
+      - CELERY_BROKER_URL=redis://localhost:6379/0
+      - CELERY_RESULT_BACKEND=redis://localhost:6379/0
+      - FLOWER_PORT=5555
+      - LOG_LEVEL=INFO
+      - LOG_DIR=/usr/src/app/logs
     volumes:
       - ./project/logs:/usr/src/app/logs
+    depends_on:
+      - web
+      - redis
+      - worker
 
-  # Streamlit UI for device dashboard
+  # Streamlit UI
   streamlit:
-    build: ./dashboard
-    network_mode: host
+    <<: *common-config
+    build: 
+      context: ./dashboard
+      dockerfile: Dockerfile
     volumes:
       - ./dashboard:/app
     depends_on:
       - web
 
-  # Redis service for Celery broker and backend
+  # Redis service
   redis:
-    image: redis:7  # Use official Redis image
-    network_mode: host
+    <<: *common-config
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
