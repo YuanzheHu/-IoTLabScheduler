@@ -531,3 +531,15 @@ else:
 # Automatic refresh
 if auto_refresh and experiments:
     time.sleep(3)  # Fixed refresh interval to 3 seconds 
+        </p>
+        <div style="background: white; padding: 25px; border-radius: 15px; border: 2px dashed #dee2e6; display: inline-block;">
+            <p style="margin: 0; color: #7f8c8d; font-size: 16px;">
+                💡 <strong>Tip:</strong> Go to the "Device Details" page and start a DoS experiment to see it here.
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Automatic refresh
+if auto_refresh and experiments:
+    time.sleep(3)  # Fixed refresh interval to 3 seconds 

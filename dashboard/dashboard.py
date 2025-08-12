@@ -223,3 +223,19 @@ with col2:
     st.markdown("✅ Port Analysis")
     st.markdown("✅ Attack Experiments")
     st.markdown("✅ V2 Engine Support")
+    page_icon="🔬",
+    layout="wide"
+)
+
+# Apply global fix for Material Design Icons display issue
+apply_icon_fixes()
+
+# Setup auto refresh functionality
+auto_refresh_enabled = setup_auto_refresh()
+
+# Main dashboard title and description
+st.title("🔬 IoT Lab Scheduler")
+st.write("Welcome to the IoT Lab Scheduler! Please use the sidebar to navigate to different feature pages.")
+
+# Display auto refresh status if enabled
+if auto_refresh_enabled:

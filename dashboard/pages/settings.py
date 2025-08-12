@@ -188,3 +188,35 @@ with st.expander("📚 Documentation", expanded=False):
 # Footer
 st.markdown("---")
 st.caption("IoTLabScheduler - System Settings") 
+    
+    log_type = st.selectbox("Log Type", ["Application", "Database", "API", "All"])
+    
+    if st.button("📋 Load Logs", use_container_width=True):
+        st.info("Log loading feature is under development...")
+
+# Help information
+st.markdown("## ❓ Help & Support")
+
+with st.expander("📚 Documentation", expanded=False):
+    st.markdown("""
+    **System Documentation:**
+    
+    ### Database Reset
+    - Execute `python3 -m project.db.init_db` command
+    - Clear all existing data
+    - Recreate database table structure
+    
+    ### API Endpoints
+    - Device Management: `/devices`
+    - Experiment Management: `/experiments`
+    - Capture Management: `/captures`
+    - Scan Results: `/scan-results`
+    
+    ### Troubleshooting
+    - Check Docker container status
+    - View API service logs
+    - Verify network connectivity
+    """)
+
+# Footer
+st.markdown("---")
