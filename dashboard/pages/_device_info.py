@@ -55,10 +55,10 @@ if not mac:
 def fetch_device_by_mac(mac: str) -> Optional[Dict[str, Any]]:
     """
     Fetch device information by MAC address
-    
+
     Args:
         mac (str): MAC address string
-        
+
     Returns:
         Optional[Dict[str, Any]]: Device information as a dictionary, or None if not found
     """
@@ -85,24 +85,24 @@ if st.button("← Back to Devices", use_container_width=True):
 # Device details section
 device_name = device.get('hostname', 'Unknown')
 with st.expander(f"{device_name}", expanded=True):
-    col1, col2 = st.columns(2)  # 左右两边宽度一致
-    
+    col1, col2 = st.columns(2)
+
     with col1:
         # MAC Address with blue highlight
         mac_address = device.get('mac_address', 'Unknown')
         st.markdown(f"**MAC Address:** <span style='color: #2196F3; font-weight: bold;'>{mac_address}</span>", unsafe_allow_html=True)
-        
+
         # IP Address with green highlight
         ip_address = device.get('ip_address', '--')
         st.markdown(f"**IP Address:** <span style='color: #4CAF50; font-weight: bold;'>{ip_address}</span>", unsafe_allow_html=True)
-        
+
         # Status with color highlight (no box)
         status = device.get('status', 'unknown')
         if status == 'online':
             st.markdown(f"**Status:** <span style='color: #4CAF50; font-weight: bold;'>Online</span>", unsafe_allow_html=True)
         else:
             st.markdown(f"**Status:** <span style='color: #F44336; font-weight: bold;'>Offline</span>", unsafe_allow_html=True)
-        
+
         # Process last seen timestamp
         last_seen_raw = device.get('last_seen', None)
         if last_seen_raw:
@@ -116,17 +116,17 @@ with st.expander(f"{device_name}", expanded=True):
                 last_seen_str = str(last_seen_raw)
         else:
             last_seen_str = 'Unknown'
-        
+
         # Last Seen with purple highlight
         st.markdown(f"**Last Seen:** <span style='color: #9C27B0; font-weight: bold;'>{last_seen_str}</span>", unsafe_allow_html=True)
-    
+
     with col2:
         # Display scan information if available
         vendor = device.get('vendor')
         network_distance = device.get('network_distance')
         latency = device.get('latency')
         os_details = device.get('os_details')
-        
+
         if vendor or network_distance or latency or os_details:
             if vendor:
                 # Vendor with orange highlight
@@ -138,16 +138,38 @@ with st.expander(f"{device_name}", expanded=True):
                 # Latency with pink highlight
                 st.markdown(f"**Latency:** <span style='color: #E91E63; font-weight: bold;'>{latency}</span>", unsafe_allow_html=True)
             if os_details:
-                # OS Details with improved display
-                if os_details.get('too_many_fingerprints'):
-                    os_text = "Too many fingerprints match"
-                elif os_details.get('no_exact_match'):
-                    os_text = "No exact OS match"
+                # Extract specific OS information
+                os_text = "Not Found"  # Default value
+
+                # Try to get details from os_details
+                if isinstance(os_details, dict):
+                    # Get 'details' field (most specific info)
+                    if os_details.get('details'):
+                        os_text = os_details['details']
+                    # If no 'details', try 'aggressive_guesses'
+                    elif os_details.get('aggressive_guesses'):
+                        os_text = os_details['aggressive_guesses']
+                    # Check special states
+                    elif os_details.get('too_many_fingerprints'):
+                        os_text = "Too many fingerprints match"
+                    elif os_details.get('no_exact_match'):
+                        os_text = "No exact OS match"
+
+                # If os_details is a string (legacy format)
+                elif isinstance(os_details, str):
+                    os_text = os_details
+
+                # Show OS Details, limit length to avoid being too long
+                if len(os_text) > 60:
+                    display_text = os_text[:60] + "..."
+                    full_text = os_text
                 else:
-                    os_text = "Available"
-                st.markdown(f"**OS Details:** <span style='color: #795548; font-weight: bold;'>{os_text}</span>", unsafe_allow_html=True)
+                    display_text = os_text
+                    full_text = os_text
+
+                st.markdown(f"**OS Details:** <span style='color: #795548; font-weight: bold;' title='{full_text}'>{display_text}</span>", unsafe_allow_html=True)
         else:
-            # 预留扫描字段，显示为占位符
+            # Placeholder for scan fields
             st.markdown("**Vendor:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
             st.markdown("**Network Distance:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
             st.markdown("**Latency:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
@@ -161,10 +183,10 @@ if device.get('ip_address') and device.get('status') == 'online':
         def fetch_latest_port_scan(device_id: str) -> Optional[Dict[str, Any]]:
             """
             Fetch the latest port scan result for a device
-            
+
             Args:
                 device_id (str): Device ID of the device
-                
+
             Returns:
                 Optional[Dict[str, Any]]: Latest port scan result as a dictionary, or None if not found
             """
@@ -189,7 +211,7 @@ if device.get('ip_address') and device.get('status') == 'online':
         scan_completed_key = f"scan_completed_{device_id}"
         scan_result_key = f"latest_scan_result_{device_id}"
         scan_timestamp_key = f"scan_timestamp_{device_id}"
-        
+
         # Check if current device has new scan results
         if st.session_state.get(scan_completed_key, False) and st.session_state.get(scan_result_key):
             # Use the fresh scan result from session state for this specific device
@@ -199,7 +221,7 @@ if device.get('ip_address') and device.get('status') == 'online':
             # Fetch from database
             latest_scan = fetch_latest_port_scan(device_id)
             scan_source = "Database"
-        
+
         # Add a button to manually refresh the plots if needed
         if st.session_state.get(scan_completed_key, False):
             if st.button("🔄 Refresh Plots", key=f"refresh_plots_{device_id}"):
@@ -208,19 +230,19 @@ if device.get('ip_address') and device.get('status') == 'online':
         # Improved data validation: ensure valid port data
         if latest_scan and latest_scan.get('ports') and len(latest_scan.get('ports', [])) > 0:
             ports = latest_scan.get('ports', [])
-            
+
             # Validate port data validity
             valid_ports = []
             for port in ports:
                 if isinstance(port, dict) and port.get('port') and port.get('state'):
                     valid_ports.append(port)
-            
+
             if not valid_ports:
                 st.warning("⚠️ Port scan data format is invalid. Please run a new scan.")
                 st.info("📊 No valid port scan data available. Click '🔍 Port Scan' to scan this device.")
             else:
                 ports = valid_ports
-                
+
                 # Show scan source and timestamp with device info
                 if scan_source == "Fresh scan":
                     scan_time = st.session_state.get(scan_timestamp_key, "")
@@ -231,32 +253,32 @@ if device.get('ip_address') and device.get('status') == 'online':
                             st.success(f"🔄 Showing fresh scan results for {device.get('ip_address')} from {scan_time_str}")
                         except Exception:
                             st.success(f"🔄 Showing fresh scan results for {device.get('ip_address')}")
-                
+
                 # Process port data
                 open_ports = [p for p in ports if p.get('state') == 'open']
                 filtered_ports = [p for p in ports if p.get('state') == 'filtered']
                 closed_ports = [p for p in ports if p.get('state') == 'closed']
                 open_filtered_ports = [p for p in ports if p.get('state') == 'open|filtered']
-                
+
                 # Improved protocol detection function
                 def get_protocol(port_str: str) -> str:
                     """
                     Extract protocol from port string like '80/tcp' or '53/udp'
-                    
+
                     Args:
                         port_str (str): Port string with protocol
-                        
+
                     Returns:
                         str: Protocol (tcp/udp)
                     """
                     if isinstance(port_str, str) and '/' in port_str:
                         return port_str.split('/')[1].lower()
                     return 'tcp'  # Default to tcp if no protocol specified
-                
+
                 # Separate TCP and UDP ports with improved detection
                 tcp_ports = [p for p in ports if get_protocol(p.get('port', '')) == 'tcp']
                 udp_ports = [p for p in ports if get_protocol(p.get('port', '')) == 'udp']
-                
+
                 # Calculate statistics - only count truly open ports
                 total_ports = len(ports)
                 open_count = len(open_ports)  # Only count truly open ports
@@ -264,10 +286,10 @@ if device.get('ip_address') and device.get('status') == 'online':
                 udp_count = len(udp_ports)
                 tcp_percentage = (tcp_count / total_ports * 100) if total_ports > 0 else 0
                 udp_percentage = (udp_count / total_ports * 100) if total_ports > 0 else 0
-                
+
                 # Display device info and statistics cards
                 st.markdown(f"### 📊 Port Scan Results for {device.get('ip_address')} ({device.get('hostname', 'Unknown')})")
-                
+
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Total Ports", total_ports)
@@ -277,16 +299,16 @@ if device.get('ip_address') and device.get('status') == 'online':
                     st.metric("TCP Ports", tcp_count, delta=f"{tcp_percentage:.1f}%")
                 with col4:
                     st.metric("UDP Ports", udp_count, delta=f"{udp_percentage:.1f}%")
-                
+
                 # Create grouped bar chart for port status distribution
                 st.markdown("### 📊 Port Status Distribution")
-                
+
                 # Prepare data for grouped bar chart
                 port_ranges = {
                     'System Ports (0-1023)': (0, 1023),
                     'User Ports (1024-65535)': (1024, 65535)
                 }
-                
+
                 chart_data = []
                 for range_name, (start, end) in port_ranges.items():
                     # Filter ports in this range with better error handling
@@ -301,18 +323,18 @@ if device.get('ip_address') and device.get('status') == 'online':
                                 range_ports.append(p)
                         except (ValueError, TypeError):
                             continue
-                    
+
                     # Count by protocol and state with improved detection
                     tcp_open = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'open'])
                     tcp_closed = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'closed'])
                     tcp_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'filtered'])
                     tcp_open_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'open|filtered'])
-                    
+
                     udp_open = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'open'])
                     udp_closed = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'closed'])
                     udp_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'filtered'])
                     udp_open_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'open|filtered'])
-                    
+
                     chart_data.extend([
                         {'Port Range': range_name, 'Protocol': 'TCP', 'State': 'Open', 'Count': tcp_open},
                         {'Port Range': range_name, 'Protocol': 'TCP', 'State': 'Closed', 'Count': tcp_closed},
@@ -323,11 +345,11 @@ if device.get('ip_address') and device.get('status') == 'online':
                         {'Port Range': range_name, 'Protocol': 'UDP', 'State': 'Filtered', 'Count': udp_filtered},
                         {'Port Range': range_name, 'Protocol': 'UDP', 'State': 'Open|Filtered', 'Count': udp_open_filtered},
                     ])
-                
-                # 只有当有数据时才创建图表
+
+                # Only create chart if there is data
                 if any(item['Count'] > 0 for item in chart_data):
                     df_chart = pd.DataFrame(chart_data)
-                    
+
                     # Create grouped bar chart with device info in title
                     fig = px.bar(
                         df_chart,
@@ -338,12 +360,12 @@ if device.get('ip_address') and device.get('status') == 'online':
                         facet_col='Protocol',
                         color_discrete_map={
                             'Open': '#00ff00',
-                            'Closed': '#ff0000', 
+                            'Closed': '#ff0000',
                             'Filtered': '#ffff00',
-                            'Open|Filtered': '#ffa500'  # Orange for Open|Filtered
+                            'Open|Filtered': '#ffa500'
                         },
                     )
-                    
+
                     fig.update_layout(
                         height=500,
                         showlegend=True,
@@ -351,23 +373,23 @@ if device.get('ip_address') and device.get('status') == 'online':
                         xaxis_title="Port Range",
                         yaxis_title="Number of Ports"
                     )
-                    
+
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("📊 No port data available for charts. All ports may be in the same state.")
-                
+
                 # Service distribution chart with status information
                 st.markdown("### 🔧 Service Distribution")
-                
+
                 # Count services by status
                 service_status_counts = {}
                 for port in ports:
                     service = port.get('service', 'unknown')
                     state = port.get('state', 'unknown')
-                    
+
                     if service not in service_status_counts:
                         service_status_counts[service] = {'open': 0, 'closed': 0, 'filtered': 0, 'open|filtered': 0}
-                    
+
                     # Handle composite states like 'Open|Filtered'
                     if '|' in state:
                         # Special handling for 'Open|Filtered' state
@@ -385,31 +407,31 @@ if device.get('ip_address') and device.get('status') == 'online':
                         state_lower = state.lower()
                         if state_lower in service_status_counts[service]:
                             service_status_counts[service][state_lower] += 1
-                
+
                 if service_status_counts:
                     # Prepare data for stacked bar chart
                     service_data = []
                     for service, status_counts in service_status_counts.items():
                         total_count = sum(status_counts.values())
-                        if total_count > 0:  # Only include services with ports
+                        if total_count > 0:
                             service_data.extend([
                                 {'Service': service, 'Status': 'Open', 'Count': status_counts['open']},
                                 {'Service': service, 'Status': 'Closed', 'Count': status_counts['closed']},
                                 {'Service': service, 'Status': 'Filtered', 'Count': status_counts['filtered']},
                                 {'Service': service, 'Status': 'Open|Filtered', 'Count': status_counts['open|filtered']}
                             ])
-                    
+
                     # Sort by total count
                     service_totals = {}
                     for service, status_counts in service_status_counts.items():
                         service_totals[service] = sum(status_counts.values())
-                    
+
                     # Sort services by total count
                     sorted_services = sorted(service_totals.items(), key=lambda x: x[1], reverse=True)
                     service_order = [service for service, _ in sorted_services]
-                    
+
                     df_services = pd.DataFrame(service_data)
-                    
+
                     # Create stacked bar chart with device info in title
                     fig2 = px.bar(
                         df_services,
@@ -420,11 +442,11 @@ if device.get('ip_address') and device.get('status') == 'online':
                             'Open': '#00ff00',
                             'Closed': '#ff0000',
                             'Filtered': '#ffff00',
-                            'Open|Filtered': '#ffa500'  # Orange for Open|Filtered
+                            'Open|Filtered': '#ffa500'
                         },
                         barmode='stack'
                     )
-                    
+
                     fig2.update_layout(
                         height=400,
                         title=f"Service Distribution - {device.get('ip_address')} ({device.get('hostname', 'Unknown')})",
@@ -432,33 +454,33 @@ if device.get('ip_address') and device.get('status') == 'online':
                         yaxis_title="Number of Ports",
                         xaxis={'categoryorder': 'array', 'categoryarray': service_order}
                     )
-                    
+
                     fig2.update_xaxes(tickangle=45)
-                    
+
                     st.plotly_chart(fig2, use_container_width=True)
-                    
+
                     # Add service statistics
                     st.markdown("#### 📊 Service Statistics")
                     col1, col2, col3 = st.columns(3)
-                    
+
                     with col1:
                         open_services = len([s for s, counts in service_status_counts.items() if counts['open'] > 0])
                         st.metric("Services with Open Ports", open_services)
-                    
+
                     with col2:
                         total_services = len(service_status_counts)
                         st.metric("Total Services", total_services)
-                    
+
                     with col3:
                         avg_ports_per_service = sum(service_totals.values()) / len(service_totals) if service_totals else 0
                         st.metric("Avg Ports per Service", f"{avg_ports_per_service:.1f}")
-                    
+
                     # Add statistics for Open|Filtered states (removed info message)
                     total_open_filtered = sum(counts['open|filtered'] for counts in service_status_counts.values())
-                
+
                 # Detailed port table
                 st.markdown("### 📋 Port Details")
-                
+
                 # Add filters
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -469,7 +491,7 @@ if device.get('ip_address') and device.get('status') == 'online':
                     )
                 with col2:
                     state_filter = st.selectbox(
-                        "State Filter", 
+                        "State Filter",
                         ["All", "Open", "Closed", "Filtered", "Open|Filtered"],
                         key=f"state_filter_{device_id}"
                     )
@@ -479,22 +501,22 @@ if device.get('ip_address') and device.get('status') == 'online':
                         placeholder="Enter service name...",
                         key=f"service_filter_{device_id}"
                     )
-                
+
                 # Filter ports based on selections
                 filtered_ports_list = ports.copy()
-                
+
                 if protocol_filter != "All":
-                    filtered_ports_list = [p for p in filtered_ports_list 
+                    filtered_ports_list = [p for p in filtered_ports_list
                                         if protocol_filter.lower() in p.get('port', '').lower()]
-                
+
                 if state_filter != "All":
-                    filtered_ports_list = [p for p in filtered_ports_list 
+                    filtered_ports_list = [p for p in filtered_ports_list
                                         if p.get('state', '').lower() == state_filter.lower()]
-                
+
                 if service_filter:
-                    filtered_ports_list = [p for p in filtered_ports_list 
+                    filtered_ports_list = [p for p in filtered_ports_list
                                         if service_filter.lower() in p.get('service', '').lower()]
-                
+
                 # Create table data
                 table_data = []
                 for port in filtered_ports_list:
@@ -503,14 +525,14 @@ if device.get('ip_address') and device.get('status') == 'online':
                         protocol = port.get('port', '').split('/')[1] if '/' in port.get('port', '') else 'tcp'
                         state = port.get('state', 'unknown')
                         service = port.get('service', 'unknown')
-                        
+
                         status_color = {
                             'open': '🟢',
                             'closed': '🔴',
                             'filtered': '🟡',
-                            'open|filtered': '🟠',  # Orange circle for Open|Filtered
+                            'open|filtered': '🟠',
                         }.get(state.lower(), '⚪')
-                        
+
                         table_data.append({
                             'Status': status_color,
                             'Port': port_num,
@@ -520,11 +542,11 @@ if device.get('ip_address') and device.get('status') == 'online':
                         })
                     except Exception:
                         continue
-                
+
                 if table_data:
                     df_table = pd.DataFrame(table_data)
                     st.dataframe(
-                        df_table, 
+                        df_table,
                         use_container_width=True,
                         column_config={
                             "Status": st.column_config.TextColumn("Status", width="small"),
@@ -537,7 +559,7 @@ if device.get('ip_address') and device.get('status') == 'online':
                     st.caption(f"Showing {len(table_data)} of {len(ports)} ports")
                 else:
                     st.info("No ports match the selected filters")
-                
+
                 # Show scan timestamp
                 if scan_source == "Fresh scan":
                     scan_time = st.session_state.get(scan_timestamp_key, "")
@@ -558,7 +580,7 @@ if device.get('ip_address') and device.get('status') == 'online':
                         except Exception:
                             st.caption(f"📅 Last scanned: {scan_time}")
         else:
-            # 改进错误提示
+            # Improved error messages
             if latest_scan is None:
                 st.info("📊 No port scan data available. Click '🔍 Port Scan' to scan this device.")
             elif not latest_scan.get('ports'):
@@ -574,7 +596,7 @@ with st.expander("⚡ Actions", expanded=True):
         with col1:
             if st.button("🔍 Port Scan", use_container_width=True, key="port_scan_btn"):
                 st.session_state["active_action"] = "port_scan"
-                # 重置其他action的状态
+                # Reset other action states
                 st.session_state["show_port_scan"] = True
                 st.session_state["show_os_scan"] = False
                 st.session_state["show_dos_form"] = False
@@ -582,7 +604,7 @@ with st.expander("⚡ Actions", expanded=True):
         with col2:
             if st.button("🖥️ OS Scan", use_container_width=True, key="os_scan_btn"):
                 st.session_state["active_action"] = "os_scan"
-                # 重置其他action的状态
+                # Reset other action states
                 st.session_state["show_port_scan"] = False
                 st.session_state["show_os_scan"] = True
                 st.session_state["show_dos_form"] = False
@@ -590,7 +612,7 @@ with st.expander("⚡ Actions", expanded=True):
         with col3:
             if st.button("🚀 DoS Attack", use_container_width=True, key="dos_btn"):
                 st.session_state["active_action"] = "dos_attack"
-                # 重置其他action的状态
+                # Reset other action states
                 st.session_state["show_port_scan"] = False
                 st.session_state["show_os_scan"] = False
                 st.session_state["show_dos_form"] = True
@@ -692,7 +714,7 @@ with st.expander("⚡ Actions", expanded=True):
 
                                 # Keep the scan form visible to show results
                                 # Don't hide the form and don't rerun to preserve raw output display
-                                
+
                                 # Add a done button to close the form
                                 if st.button("✅ Done", key="port_scan_done"):
                                     st.session_state["show_port_scan"] = False
@@ -765,7 +787,7 @@ with st.expander("⚡ Actions", expanded=True):
                                 )
 
                                 st.markdown("### 🖥️ OS Detection Results")
-                                
+
                                 # Display host status
                                 host_status = os_result.get('host_status')
                                 if host_status:
@@ -776,18 +798,18 @@ with st.expander("⚡ Actions", expanded=True):
                                 col1, col2 = st.columns(2)
                                 mac_address = os_result.get('mac_address')
                                 vendor = os_result.get('vendor')
-                                
+
                                 with col1:
                                     if mac_address:
                                         st.info(f"🔗 **MAC Address:** {mac_address}")
                                 with col2:
                                     if vendor:
                                         st.info(f"🏭 **Vendor:** {vendor}")
-                                
+
                                 # Display network information (distance and latency)
                                 network_distance = os_result.get('network_distance')
                                 scan_summary = os_result.get('scan_summary', {})
-                                
+
                                 if network_distance or scan_summary.get('latency'):
                                     st.markdown("**🌐 Network Information:**")
                                     net_col1, net_col2 = st.columns(2)
@@ -832,7 +854,7 @@ with st.expander("⚡ Actions", expanded=True):
                                 # Raw output
                                 with st.expander("📋 Raw Scan Output"):
                                     st.code(os_result.get('raw_output', 'No output available'))
-                                
+
                                 # Add a done button to close the form
                                 if st.button("✅ Done", key="os_scan_done"):
                                     st.session_state["show_os_scan"] = False
@@ -846,16 +868,16 @@ with st.expander("⚡ Actions", expanded=True):
 
         # Experiment Monitoring Section
         st.markdown("### 🔬 Experiment Monitoring")
-        
+
         # Check for active experiments for this device
         active_experiments = []
         for key, value in st.session_state.items():
             if key.startswith("experiment_") and value.get("target_ip") == device.get('ip_address'):
                 active_experiments.append(value)
-        
+
         if active_experiments:
             st.info(f"📊 Found {len(active_experiments)} active experiment(s) for this device")
-            
+
             for exp in active_experiments:
                 with st.expander(f"🔬 {exp['name']} (ID: {exp['id']})", expanded=False):
                     col1, col2, col3 = st.columns(3)
@@ -868,7 +890,7 @@ with st.expander("⚡ Actions", expanded=True):
                     with col3:
                         start_time = datetime.datetime.fromisoformat(exp['start_time'])
                         st.metric("Start Time", start_time.strftime('%H:%M:%S'))
-                        
+
                         # Add refresh button to check current status
                         if st.button(f"🔄 Refresh Status", key=f"refresh_exp_{exp['id']}"):
                             try:
@@ -877,7 +899,7 @@ with st.expander("⚡ Actions", expanded=True):
                                     status_data = status_resp.json()
                                     st.success(f"✅ Status: {status_data.get('status', 'Unknown')}")
                                     st.info(f"📈 Progress: {status_data.get('progress', 'N/A')}")
-                                    
+
                                     # Update session state with latest info
                                     exp.update({
                                         "status": status_data.get('status'),
@@ -888,7 +910,7 @@ with st.expander("⚡ Actions", expanded=True):
                                     st.error(f"❌ Failed to fetch status: {status_resp.text}")
                             except Exception as e:
                                 st.error(f"❌ Error fetching status: {e}")
-        
+
         # DoS Attack Experiment Form V2
         if st.session_state.get("show_dos_form", False):
             st.markdown(
@@ -909,12 +931,12 @@ with st.expander("⚡ Actions", expanded=True):
                     f"<div class='dos-form'><b>🚀 Start a DoS Attack Experiment V2 on this device</b></div>",
                     unsafe_allow_html=True,
                 )
-                
+
                 # Basic configuration
                 dos_name = st.text_input(
                     "Experiment Name", value=f"DoS V2 on {device.get('hostname', 'Device')}"
                 )
-                
+
                 col1, col2 = st.columns(2)
                 with col1:
                     attack_type = st.selectbox(
@@ -928,7 +950,7 @@ with st.expander("⚡ Actions", expanded=True):
                         index=0,
                         help="Single: One-time attack, Cyclic: Repeated attacks with settle time"
                     )
-                
+
                 with col2:
                     dos_port = st.number_input(
                         "Port", value=55443, min_value=1, max_value=65535
@@ -939,41 +961,41 @@ with st.expander("⚡ Actions", expanded=True):
                         index=0,
                         help="Select network interface for the attack"
                     )
-                
+
                 # Duration and timing configuration
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     dos_duration = st.number_input(
-                        "Attack Duration (sec)", 
-                        value=60, 
-                        min_value=1, 
+                        "Attack Duration (sec)",
+                        value=60,
+                        min_value=1,
                         max_value=3600,
                         help="Duration of each attack cycle"
                     )
-                
+
                 with col2:
                     cycles = st.number_input(
-                        "Cycles", 
-                        value=1, 
-                        min_value=1, 
+                        "Cycles",
+                        value=1,
+                        min_value=1,
                         max_value=100,
                         help="Number of attack cycles (for cyclic mode)"
                     )
-                
+
                 with col3:
                     settle_time = st.number_input(
-                        "Settle Time (sec)", 
-                        value=30, 
-                        min_value=0, 
+                        "Settle Time (sec)",
+                        value=30,
+                        min_value=0,
                         max_value=300,
                         help="Time between attack cycles"
                     )
-                
+
                 # Show total estimated time
                 if attack_mode == "cyclic" and cycles > 1:
                     total_time = (dos_duration * cycles) + (settle_time * (cycles - 1))
                     st.info(f"⏱️ Total estimated time: {total_time} seconds ({total_time/60:.1f} minutes)")
-                
+
                 # Action buttons
                 col1, col2 = st.columns(2)
                 with col1:
@@ -999,14 +1021,14 @@ with st.expander("⚡ Actions", expanded=True):
                         "cycles": cycles,
                         "settle_time_sec": settle_time
                     }
-                    
+
                     try:
                         # Use V2 API endpoint
                         resp = requests.post(f"{EXPERIMENTS_URL}/v2", json=payload, timeout=30)
                         if resp.status_code == 200:
                             exp_data = resp.json()
                             exp_id = exp_data.get('id', None)
-                            
+
                             # Store experiment info in session state for monitoring
                             st.session_state[f"experiment_{exp_id}"] = {
                                 "id": exp_id,
@@ -1016,16 +1038,16 @@ with st.expander("⚡ Actions", expanded=True):
                                 "cycles": cycles,
                                 "start_time": datetime.datetime.now().isoformat()
                             }
-                            
+
                             st.success(f"🚀 DoS Attack V2 started successfully!")
                             st.success(f"📊 Experiment ID: {exp_id}")
                             st.success(f"🎯 Target: {device.get('ip_address')} ({device.get('hostname', 'Device')})")
                             st.success(f"🔄 Mode: {attack_mode.upper()}, Cycles: {cycles}")
-                            
+
                             # Show monitoring option
                             if attack_mode == "cyclic":
                                 st.info("📈 Use the 'Monitor Experiments' page to track attack progress")
-                            
+
                             st.session_state["show_dos_form"] = False
                             st.session_state["active_action"] = None
                         else:
