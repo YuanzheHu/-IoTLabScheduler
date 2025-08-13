@@ -15,7 +15,7 @@ def setup_auto_refresh():
     """
     # Check if auto refresh setting already exists in session state
     if 'auto_refresh_enabled' not in st.session_state:
-        st.session_state.auto_refresh_enabled = True
+        st.session_state.auto_refresh_enabled = False
     
     # Return auto refresh status
     return st.session_state.auto_refresh_enabled
@@ -31,6 +31,6 @@ def toggle_auto_refresh():
     if 'auto_refresh_enabled' in st.session_state:
         st.session_state.auto_refresh_enabled = not st.session_state.auto_refresh_enabled
     else:
-        st.session_state.auto_refresh_enabled = True
+        st.session_state.auto_refresh_enabled = False
     
     return st.session_state.auto_refresh_enabled

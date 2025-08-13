@@ -42,9 +42,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载静态文件和模板
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# 挂载静态文件和模板（如果目录存在）
+try:
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+except RuntimeError:
+    # 如果static目录不存在，跳过挂载
+    pass
+
+try:
+    templates = Jinja2Templates(directory="templates")
+except Exception:
+    # 如果templates目录不存在，设置为None
+    templates = None
 
 # 注册API路由 - 只保留核心功能
 app.include_router(devices_router)

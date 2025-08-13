@@ -441,31 +441,152 @@ class ScanEngine:
                         logger.warning(f"Could not parse port info: {port_info}")
 
     def _parse_os_scan_output(self, result: ScanResult, output: str):
-        """Parses the output of an OS scan.
+        """Parses the output of an OS scan with enhanced information extraction.
 
         Args:
             result: The ScanResult object to populate.
             output: The raw output from nmap.
         """
-        os_info = {}
+        os_info = {
+            "mac_address": None,
+            "vendor": None,
+            "network_distance": None,
+            "os_guesses": [],
+            "os_details": {},
+            "port_info": [],
+            "scan_summary": {},
+            "host_status": None,
+            "scan_statistics": {}
+        }
+        
         in_os_details = False
-
-        for line in output.splitlines():
-            if "OS details:" in line:
+        in_port_section = False
+        lines = output.splitlines()
+        
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+                
+            # 解析扫描开始信息
+            if "Starting Nmap" in line:
+                os_info["scan_summary"]["nmap_version"] = line.split("Nmap")[1].split("(")[0].strip()
+                os_info["scan_summary"]["scan_start"] = line.split("at")[1].strip() if "at" in line else None
+            
+            # 解析扫描目标
+            elif "Nmap scan report for" in line:
+                target = line.split("Nmap scan report for")[1].strip()
+                os_info["scan_summary"]["target"] = target
+            
+            # 解析主机状态和延迟
+            elif "Host is up" in line:
+                os_info["host_status"] = "up"
+                if "(" in line and ")" in line:
+                    latency = line.split("(")[1].split(")")[0]
+                    os_info["scan_summary"]["latency"] = latency
+            elif "Host is down" in line:
+                os_info["host_status"] = "down"
+                
+            # 解析端口统计信息
+            elif "Not shown:" in line:
+                port_stats = line.split("Not shown:")[1].strip()
+                os_info["scan_statistics"]["hidden_ports"] = port_stats
+                
+            # 检测端口部分开始
+            elif line_stripped.startswith("PORT") and "STATE" in line and "SERVICE" in line:
+                in_port_section = True
+                continue
+                
+            # 解析端口信息
+            elif in_port_section and "/" in line_stripped:
+                parts = line_stripped.split()
+                if len(parts) >= 3:
+                    port_info = {
+                        "port": parts[0],
+                        "state": parts[1],
+                        "service": parts[2] if len(parts) > 2 else "unknown"
+                    }
+                    os_info["port_info"].append(port_info)
+                    
+            # 解析MAC地址和厂商
+            elif "MAC Address:" in line:
+                mac_part = line.split("MAC Address:")[1].strip()
+                if "(" in mac_part and ")" in mac_part:
+                    os_info["mac_address"] = mac_part.split("(")[0].strip()
+                    os_info["vendor"] = mac_part.split("(")[1].split(")")[0].strip()
+                else:
+                    os_info["mac_address"] = mac_part
+                    
+            # 解析网络距离
+            elif "Network Distance:" in line:
+                distance = line.split("Network Distance:")[1].strip()
+                os_info["network_distance"] = distance
+                
+            # 解析OS详细信息
+            elif "OS details:" in line:
                 in_os_details = True
-                os_info["details"] = line.split("OS details:")[1].strip()
+                details = line.split("OS details:")[1].strip()
+                if details:
+                    os_info["os_details"]["details"] = details
+                    os_info["os_guesses"].append(details)
+                    
             elif "OS CPE:" in line:
-                os_info["cpe"] = line.split("OS CPE:")[1].strip()
+                cpe = line.split("OS CPE:")[1].strip()
+                os_info["os_details"]["cpe"] = cpe
+                
+            elif "Aggressive OS guesses:" in line:
+                guesses_text = line.split("Aggressive OS guesses:")[1].strip()
+                if guesses_text:
+                    # 解析多个OS猜测，通常以逗号分隔
+                    guesses_list = [g.strip() for g in guesses_text.split(",") if g.strip()]
+                    os_info["os_guesses"].extend(guesses_list)
+                    os_info["os_details"]["aggressive_guesses"] = guesses_text
+                    
+            elif "OS guesses:" in line:
+                guesses_text = line.split("OS guesses:")[1].strip()
+                if guesses_text:
+                    guesses_list = [g.strip() for g in guesses_text.split(",") if g.strip()]
+                    os_info["os_guesses"].extend(guesses_list)
+                    
+            elif "Too many fingerprints match this host" in line:
+                os_info["os_details"]["too_many_fingerprints"] = True
+                # Even with too many fingerprints, we provide useful information
+                if os_info["mac_address"] or os_info["port_info"]:
+                    os_info["os_guesses"].append("Device detected but too many fingerprints to determine specific OS type")
+                    
+            elif "No exact OS matches" in line:
+                os_info["os_details"]["no_exact_match"] = True
+                if os_info["mac_address"] or os_info["port_info"]:
+                    os_info["os_guesses"].append("Device detected but no exact OS match found")
+                    
             elif "OS detection performed" in line:
                 in_os_details = False
-            elif in_os_details and line.strip():
-                if "Aggressive OS guesses:" in line:
-                    guesses = line.split("Aggressive OS guesses:")[1].strip()
-                    os_info["aggressive_guesses"] = guesses
-                elif "No exact OS matches" in line:
-                    os_info["no_exact_match"] = True
-                elif "Too many fingerprints" in line:
-                    os_info["too_many_fingerprints"] = True
+                in_port_section = False
+                
+            # 解析扫描完成信息
+            elif "Nmap done:" in line:
+                scan_info = line.split("Nmap done:")[1].strip()
+                if "scanned in" in scan_info:
+                    time_part = scan_info.split("scanned in")[1].strip()
+                    os_info["scan_statistics"]["total_time"] = time_part
+                os_info["scan_statistics"]["completion_info"] = scan_info
+
+        # If no OS guesses but device info exists, provide default description
+        if not os_info["os_guesses"] and (os_info["mac_address"] or os_info["port_info"] or os_info["host_status"]):
+            device_info = []
+            if os_info["vendor"]:
+                device_info.append(f"Vendor: {os_info['vendor']}")
+            if os_info["port_info"]:
+                open_ports = [p for p in os_info["port_info"] if p["state"] == "open"]
+                if open_ports:
+                    device_info.append(f"{len(open_ports)} open ports")
+            if os_info["network_distance"]:
+                device_info.append(f"Network Distance: {os_info['network_distance']}")
+                
+            if device_info:
+                os_info["os_guesses"] = [f"Active device detected ({', '.join(device_info)})"]
+            else:
+                os_info["os_guesses"] = ["Device detected - view details for more information"]
 
         result.os_info = os_info
 

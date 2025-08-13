@@ -50,27 +50,48 @@ def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
         scanned = discovery.discover(subnet)
         identified_devices = discovery.identify(scanned)
 
-        # 1. Ensure all known devices from devices.txt exist in DB
+        # 1. Ensure all known devices from devices.txt exist in DB (with deduplication)
         mac_to_device = {d.mac_address: d for d in db.query(Device).all()}
+        devices_to_add = []
+        processed_macs_txt = set()
+        
         for dev in discovery.mac_name_mapping.items():
             mac, name = dev
             # Ensure MAC is properly normalized
             normalized_mac = DeviceDiscovery.normalize_mac(mac)
+            
+            # Skip if we've already processed this MAC from devices.txt
+            if normalized_mac in processed_macs_txt:
+                continue
+            processed_macs_txt.add(normalized_mac)
+            
             if normalized_mac not in mac_to_device:
-                db.add(Device(mac_address=normalized_mac, hostname=name, status='offline', ip_address=''))
+                devices_to_add.append(Device(mac_address=normalized_mac, hostname=name, status='offline', ip_address=None))
+        
+        # Add all new devices at once
+        if devices_to_add:
+            db.add_all(devices_to_add)
+            db.flush()  # Ensure new devices are committed to the session
         
         # 2. Update DB: set all known devices offline by default
         for device in db.query(Device).all():
             device.status = 'offline'
-            device.ip_address = ''
+            device.ip_address = None
         
-        # 3. Update DB: set scanned/online devices
+        # 3. Update DB: set scanned/online devices (with deduplication)
         updated_count = 0
+        processed_macs = set()  # Track processed MACs to avoid duplicates
         for device_info in identified_devices:
             if not device_info['IP']:
                 continue  # Only update online devices here
             # Ensure MAC is properly normalized for comparison
             normalized_mac = DeviceDiscovery.normalize_mac(device_info['MAC'])
+            
+            # Skip if we've already processed this MAC in this scan
+            if normalized_mac in processed_macs:
+                continue
+            processed_macs.add(normalized_mac)
+            
             device = db.query(Device).filter(Device.mac_address == normalized_mac).first()
             if device:
                 device.ip_address = device_info['IP']
@@ -79,14 +100,29 @@ def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
                 device.last_seen = datetime.datetime.utcnow()
                 updated_count += 1
             else:
-                db.add(Device(
-                    ip_address=device_info['IP'],
-                    mac_address=normalized_mac,
-                    hostname=device_info['Name'],
-                    status='online',
-                    last_seen=datetime.datetime.utcnow()
-                ))
-                updated_count += 1
+                # Check if device already exists in pending adds (defensive programming)
+                try:
+                    new_device = Device(
+                        ip_address=device_info['IP'],
+                        mac_address=normalized_mac,
+                        hostname=device_info['Name'],
+                        status='online',
+                        last_seen=datetime.datetime.utcnow()
+                    )
+                    db.add(new_device)
+                    db.flush()  # Force SQL execution to catch constraint errors early
+                    updated_count += 1
+                except Exception as e:
+                    print(f"Warning: Could not add device {normalized_mac}: {e}")
+                    db.rollback()
+                    # Try to update existing device if it was created in the meantime
+                    device = db.query(Device).filter(Device.mac_address == normalized_mac).first()
+                    if device:
+                        device.ip_address = device_info['IP']
+                        device.hostname = device_info['Name']
+                        device.status = 'online'
+                        device.last_seen = datetime.datetime.utcnow()
+                        updated_count += 1
         
         # Commit all changes at once
         db.commit()
@@ -141,7 +177,12 @@ def get_device_by_mac(mac_address: str, db: Session = Depends(get_db)):
         "status": device.status,
         "port": device.port,
         "os_info": device.os_info,
-        "last_seen": device.last_seen
+        "last_seen": device.last_seen,
+        "vendor": device.vendor,
+        "network_distance": device.network_distance,
+        "latency": device.latency,
+        "os_details": device.os_details,
+        "scan_summary": device.scan_summary
     }
 
 @router.get("/{ip}/portscan")
@@ -283,6 +324,13 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
         scan_result = {
             "os_guesses": result.os_info.get("os_guesses", []),
             "os_details": result.os_info.get("os_details", {}),
+            "mac_address": result.os_info.get("mac_address"),
+            "vendor": result.os_info.get("vendor"),
+            "network_distance": result.os_info.get("network_distance"),
+            "port_info": result.os_info.get("port_info", []),
+            "scan_summary": result.os_info.get("scan_summary", {}),
+            "host_status": result.os_info.get("host_status"),
+            "scan_statistics": result.os_info.get("scan_statistics", {}),
             "raw_output": result.raw_output,
             "scan_duration": result.scan_duration
         }
@@ -307,6 +355,10 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
                 
                 # 使用更新或创建函数，确保一个设备只有一个扫描结果
                 update_or_create_scan_result(scan_result_data, db)
+                
+                # Update device information from scan results
+                if result.os_info:
+                    update_device_from_scan_results(device_id, result.os_info, db)
             except Exception as e:
                 # 如果保存失败，记录错误但不影响扫描结果返回
                 print(f"Warning: Failed to save scan result to database: {e}")
@@ -317,3 +369,47 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
         raise HTTPException(status_code=400, detail="Invalid IP address format")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OS scan failed: {str(e)}")
+
+def update_device_from_scan_results(device_id: int, scan_info: dict, db: Session):
+    """
+    Update device information from scan results
+    
+    Args:
+        device_id: Device ID
+        scan_info: Scan information dictionary
+        db: Database session
+    """
+    try:
+        device = db.query(Device).filter(Device.id == device_id).first()
+        if not device:
+            return
+            
+        # Update vendor information
+        if scan_info.get('vendor'):
+            device.vendor = scan_info['vendor']
+            
+        # Update network distance
+        if scan_info.get('network_distance'):
+            device.network_distance = scan_info['network_distance']
+            
+        # Update latency information
+        if scan_info.get('scan_summary', {}).get('latency'):
+            device.latency = scan_info['scan_summary']['latency']
+            
+        # Update OS details
+        if scan_info.get('os_details'):
+            device.os_details = scan_info['os_details']
+            
+        # Update scan summary
+        if scan_info.get('scan_summary'):
+            device.scan_summary = scan_info['scan_summary']
+            
+        # Update simplified OS info
+        if scan_info.get('os_guesses'):
+            device.os_info = scan_info['os_guesses'][0] if scan_info['os_guesses'] else None
+            
+        db.commit()
+        
+    except Exception as e:
+        print(f"Error updating device from scan results: {e}")
+        db.rollback()

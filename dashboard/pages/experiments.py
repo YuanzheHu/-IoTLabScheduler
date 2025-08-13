@@ -255,7 +255,7 @@ col1, col2 = st.columns([3, 1])
 with col1:
     st.markdown("### 📊 Real-time Monitoring Console")
 with col2:
-    auto_refresh = st.checkbox("🔄 Auto Refresh", value=True, help="Enable automatic page refresh")
+    auto_refresh = st.checkbox("🔄 Auto Refresh", value=False, help="Enable automatic page refresh")
 
 # Fetch experiment data
 with st.spinner("Fetching experiment data..."):

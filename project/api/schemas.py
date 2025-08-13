@@ -41,6 +41,11 @@ class DeviceRead(DeviceBase):
     """
     id: int
     last_seen: Optional[datetime] = None
+    vendor: Optional[str] = None
+    network_distance: Optional[str] = None
+    latency: Optional[str] = None
+    os_details: Optional[Dict[str, Any]] = None
+    scan_summary: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True

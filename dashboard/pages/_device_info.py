@@ -36,12 +36,13 @@ st.title("📋 Device Details")
 # Apply icon fixes
 apply_icon_fixes()
 
-# Auto refresh configuration
+# Manual refresh configuration
 col1, col2 = st.columns([3, 1])
 with col1:
-    st.markdown("### 📊 Device Monitoring Console")
+    st.markdown("### Device Monitoring Console")
 with col2:
-    auto_refresh = st.checkbox("🔄 Auto Refresh", value=True, help="Enable automatic page refresh")
+    if st.button("🔄 Refresh Device Info", use_container_width=True):
+        st.rerun()
 
 # Get selected device MAC from session state
 mac = st.session_state.get("selected_mac", None)
@@ -82,22 +83,25 @@ if st.button("← Back to Devices", use_container_width=True):
     st.switch_page("pages/devices.py")
 
 # Device details section
-with st.expander("📋 Device Details", expanded=True):
-    col1, col2 = st.columns([2, 1])
+device_name = device.get('hostname', 'Unknown')
+with st.expander(f"{device_name}", expanded=True):
+    col1, col2 = st.columns(2)  # 左右两边宽度一致
     
     with col1:
-        st.markdown(f"**Device Name:** {device.get('hostname', 'Unknown')}")
-        st.markdown(f"**MAC Address:** `{device.get('mac_address', 'Unknown')}`")
-        st.markdown(f"**IP Address:** {device.get('ip_address', '--')}")
+        # MAC Address with blue highlight
+        mac_address = device.get('mac_address', 'Unknown')
+        st.markdown(f"**MAC Address:** <span style='color: #2196F3; font-weight: bold;'>{mac_address}</span>", unsafe_allow_html=True)
         
+        # IP Address with green highlight
+        ip_address = device.get('ip_address', '--')
+        st.markdown(f"**IP Address:** <span style='color: #4CAF50; font-weight: bold;'>{ip_address}</span>", unsafe_allow_html=True)
+        
+        # Status with color highlight (no box)
         status = device.get('status', 'unknown')
         if status == 'online':
-            st.success("🟢 **Status: Online**")
+            st.markdown(f"**Status:** <span style='color: #4CAF50; font-weight: bold;'>Online</span>", unsafe_allow_html=True)
         else:
-            st.error("🔴 **Status: Offline**")
-    
-    with col2:
-        st.markdown("**Device Type:** IoT Device")
+            st.markdown(f"**Status:** <span style='color: #F44336; font-weight: bold;'>Offline</span>", unsafe_allow_html=True)
         
         # Process last seen timestamp
         last_seen_raw = device.get('last_seen', None)
@@ -113,8 +117,42 @@ with st.expander("📋 Device Details", expanded=True):
         else:
             last_seen_str = 'Unknown'
         
-        st.markdown(f"**Last Seen:** {last_seen_str}")
-        st.markdown("**Network:** Local subnet")
+        # Last Seen with purple highlight
+        st.markdown(f"**Last Seen:** <span style='color: #9C27B0; font-weight: bold;'>{last_seen_str}</span>", unsafe_allow_html=True)
+    
+    with col2:
+        # Display scan information if available
+        vendor = device.get('vendor')
+        network_distance = device.get('network_distance')
+        latency = device.get('latency')
+        os_details = device.get('os_details')
+        
+        if vendor or network_distance or latency or os_details:
+            if vendor:
+                # Vendor with orange highlight
+                st.markdown(f"**Vendor:** <span style='color: #FF9800; font-weight: bold;'>{vendor}</span>", unsafe_allow_html=True)
+            if network_distance:
+                # Network Distance with teal highlight
+                st.markdown(f"**Network Distance:** <span style='color: #009688; font-weight: bold;'>{network_distance}</span>", unsafe_allow_html=True)
+            if latency:
+                # Latency with pink highlight
+                st.markdown(f"**Latency:** <span style='color: #E91E63; font-weight: bold;'>{latency}</span>", unsafe_allow_html=True)
+            if os_details:
+                # OS Details with improved display
+                if os_details.get('too_many_fingerprints'):
+                    os_text = "Too many fingerprints match"
+                elif os_details.get('no_exact_match'):
+                    os_text = "No exact OS match"
+                else:
+                    os_text = "Available"
+                st.markdown(f"**OS Details:** <span style='color: #795548; font-weight: bold;'>{os_text}</span>", unsafe_allow_html=True)
+        else:
+            # 预留扫描字段，显示为占位符
+            st.markdown("**Vendor:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
+            st.markdown("**Network Distance:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
+            st.markdown("**Latency:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
+            st.markdown("**OS Details:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
+            st.caption("Run OS Scan to get detailed information")
 
 # --- Port Information Section ---
 if device.get('ip_address') and device.get('status') == 'online':
@@ -727,22 +765,72 @@ with st.expander("⚡ Actions", expanded=True):
                                 )
 
                                 st.markdown("### 🖥️ OS Detection Results")
+                                
+                                # Display host status
+                                host_status = os_result.get('host_status')
+                                if host_status:
+                                    status_color = "🟢" if host_status == "up" else "🔴"
+                                    st.info(f"{status_color} **Host Status:** {host_status.upper()}")
 
+                                # Display hardware information (MAC address and vendor)
+                                col1, col2 = st.columns(2)
+                                mac_address = os_result.get('mac_address')
+                                vendor = os_result.get('vendor')
+                                
+                                with col1:
+                                    if mac_address:
+                                        st.info(f"🔗 **MAC Address:** {mac_address}")
+                                with col2:
+                                    if vendor:
+                                        st.info(f"🏭 **Vendor:** {vendor}")
+                                
+                                # Display network information (distance and latency)
+                                network_distance = os_result.get('network_distance')
+                                scan_summary = os_result.get('scan_summary', {})
+                                
+                                if network_distance or scan_summary.get('latency'):
+                                    st.markdown("**🌐 Network Information:**")
+                                    net_col1, net_col2 = st.columns(2)
+                                    with net_col1:
+                                        if network_distance:
+                                            st.metric("Network Distance", network_distance)
+                                    with net_col2:
+                                        if scan_summary.get('latency'):
+                                            st.metric("Latency", scan_summary['latency'])
+
+                                # Display OS detection results
                                 os_guesses = os_result.get('os_guesses', [])
                                 if os_guesses:
-                                    st.markdown("**🎯 OS Guesses:**")
+                                    st.markdown("**🎯 Operating System Detection Results:**")
                                     for i, guess in enumerate(os_guesses, 1):
-                                        st.info(f"{i}. {guess}")
+                                        # Use different colors for different types of results
+                                        if "specific OS type" in guess.lower() or "no exact match" in guess.lower():
+                                            st.warning(f"{i}. {guess}")
+                                        elif "detected" in guess.lower():
+                                            st.success(f"{i}. {guess}")
+                                        else:
+                                            st.info(f"{i}. {guess}")
                                 else:
-                                    st.warning("No OS information detected.")
+                                    # If no OS information but other device info exists
+                                    if mac_address:
+                                        st.warning("⚠️ Device detected but unable to determine operating system type")
+                                    else:
+                                        st.error("❌ No device information detected")
 
+                                # Display OS details
                                 os_details = os_result.get('os_details', {})
                                 if os_details:
-                                    st.markdown("**📋 OS Details:**")
-                                    for key, value in os_details.items():
-                                        st.code(f"{key}: {value}")
+                                    with st.expander("📋 Detailed OS Information"):
+                                        for key, value in os_details.items():
+                                            if key == "too_many_fingerprints" and value:
+                                                st.warning("⚠️ Multiple OS fingerprints detected")
+                                            elif key == "no_exact_match" and value:
+                                                st.info("ℹ️ No exact OS match found")
+                                            elif key not in ["too_many_fingerprints", "no_exact_match"]:
+                                                st.code(f"{key}: {value}")
 
-                                with st.expander("📋 Raw OS Scan Output"):
+                                # Raw output
+                                with st.expander("📋 Raw Scan Output"):
                                     st.code(os_result.get('raw_output', 'No output available'))
                                 
                                 # Add a done button to close the form
@@ -1102,8 +1190,4 @@ with st.expander("📦 PCAP Files", expanded=True):
                 unsafe_allow_html=True,
             )
 
-# Auto refresh logic
-if auto_refresh:
-    import time
-    time.sleep(3)  # Fixed refresh interval to 3 seconds
-    st.rerun()
+# Manual refresh is handled by the button above

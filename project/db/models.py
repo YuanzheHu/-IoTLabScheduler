@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Float
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Float, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .base import Base
 
@@ -9,7 +9,7 @@ class Device(Base):
 
     Fields:
         id: Primary key.
-        ip_address: IP address of the device (nullable for offline devices).
+        ip_address: IP address of the device (unique, nullable for offline devices).
         mac_address: MAC address of the device (unique).
         hostname: Device name.
         status: Current status (e.g., online, offline).
@@ -19,13 +19,20 @@ class Device(Base):
     """
     __tablename__ = 'devices'
     id = Column(Integer, primary_key=True, index=True)
-    ip_address = Column(String, index=True, nullable=True)  # 允许NULL，移除唯一性约束
+    ip_address = Column(String, index=True, nullable=True, unique=True)  # 允许NULL，但保持唯一性
     mac_address = Column(String, index=True, nullable=False, unique=True) # unique
     hostname = Column(String)
     status = Column(String)
     port = Column(String, nullable=True)
     os_info = Column(String, nullable=True)
     last_seen = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Extended fields from scan results
+    vendor = Column(String, nullable=True)  # Vendor information
+    network_distance = Column(String, nullable=True)  # Network distance
+    latency = Column(String, nullable=True)  # Latency
+    os_details = Column(JSON, nullable=True)  # Detailed OS information
+    scan_summary = Column(JSON, nullable=True)  # Scan summary information
 
 class Capture(Base):
     """
@@ -111,7 +118,7 @@ class ScanResult(Base):
         id: Primary key.
         device_id: Foreign key to the related device.
         scan_type: Type of scan (port_scan, os_scan).
-        target_ip: Target IP address for the scan.
+        target_ip: Target IP address for the scan (unique).
         scan_time: Timestamp when the scan was performed.
         scan_duration: Duration of the scan in seconds.
         ports: JSON field containing port scan results.
@@ -126,7 +133,7 @@ class ScanResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     device_id = Column(Integer, ForeignKey('devices.id'))
     scan_type = Column(String, nullable=False)  # 'port_scan' or 'os_scan'
-    target_ip = Column(String, nullable=False)  # 移除唯一性约束，允许同一IP多次扫描
+    target_ip = Column(String, nullable=False)  # IP地址字段，允许多个扫描类型使用同一IP
     scan_time = Column(DateTime, default=datetime.datetime.utcnow)
     scan_duration = Column(Integer)  # Duration in seconds
     ports = Column(JSON, nullable=True)  # Port scan results
@@ -136,6 +143,11 @@ class ScanResult(Base):
     command = Column(String, nullable=True)  # The nmap command executed
     error = Column(Text, nullable=True)  # Error message if failed
     status = Column(String, default='success')  # success, failed, running
+    
+    # Table constraints - ensure one scan result per device per scan type
+    __table_args__ = (
+        UniqueConstraint('device_id', 'scan_type', name='uq_device_scan_type'),
+    )
     
     # ORM relationships
     device = relationship('Device', backref='scan_results')
