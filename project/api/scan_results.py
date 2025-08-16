@@ -154,7 +154,7 @@ def get_scan_result(scan_result_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get scan result: {str(e)}")
 
-@router.get("/device/{device_id}", response_model=List[ScanResultRead])
+@router.get("/device/{device_id}")
 def get_device_scan_results(
     device_id: int,
     scan_type: Optional[str] = Query(None, description="Filter by scan type"),
@@ -176,7 +176,26 @@ def get_device_scan_results(
         # 按时间倒序排列
         results = query.order_by(ScanResult.scan_time.desc()).limit(limit).all()
         
-        return results
+        # 手动构建响应，处理JSON字段
+        response_results = []
+        for result in results:
+            response_results.append({
+                "id": result.id,
+                "device_id": result.device_id,
+                "scan_type": result.scan_type,
+                "target_ip": result.target_ip,
+                "scan_time": result.scan_time,
+                "scan_duration": result.scan_duration,
+                "ports": result.ports,
+                "os_guesses": result.os_guesses,
+                "os_details": result.os_details,
+                "raw_output": result.raw_output,
+                "command": result.command,
+                "error": result.error,
+                "status": result.status
+            })
+        
+        return response_results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get device scan results: {str(e)}")
 

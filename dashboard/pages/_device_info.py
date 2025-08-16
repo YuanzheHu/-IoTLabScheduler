@@ -31,6 +31,25 @@ st.set_page_config(
     layout="wide"
 )
 
+# Add custom CSS for better font rendering of MAC addresses
+st.markdown("""
+<style>
+    /* Use monospace font for MAC addresses to avoid rendering issues */
+    .mac-address {
+        font-family: 'Courier New', 'Monaco', 'Menlo', 'Consolas', 'DejaVu Sans Mono', monospace !important;
+        font-size: 14px !important;
+        letter-spacing: 1px !important;
+        font-weight: bold !important;
+        color: #2196F3 !important;
+    }
+    
+    /* General font improvements */
+    .stMarkdown {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📋 Device Details")
 
 # Apply icon fixes
@@ -72,6 +91,37 @@ def fetch_device_by_mac(mac: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def clean_mac_address(mac: str) -> str:
+    """
+    Clean and format MAC address to ensure proper display
+    
+    Args:
+        mac (str): Raw MAC address string
+        
+    Returns:
+        str: Cleaned MAC address string
+    """
+    if not mac or mac == 'Unknown':
+        return 'Unknown'
+    
+    # Remove any non-hex characters and normalize
+    import re
+    # Extract only hex characters and colons
+    hex_chars = re.findall(r'[0-9a-fA-F:]', mac)
+    cleaned = ''.join(hex_chars)
+    
+    # Ensure proper MAC format (XX:XX:XX:XX:XX:XX)
+    if len(cleaned) >= 12:
+        # Remove colons and re-add them
+        hex_only = cleaned.replace(':', '')
+        if len(hex_only) >= 12:
+            formatted = ':'.join([hex_only[i:i+2] for i in range(0, 12, 2)])
+            return formatted.upper()
+    
+    # If we can't format properly, return the original but cleaned
+    return cleaned if cleaned else str(mac)
+
+
 # Fetch device information
 device = fetch_device_by_mac(mac)
 if not device:
@@ -88,9 +138,10 @@ with st.expander(f"{device_name}", expanded=True):
     col1, col2 = st.columns(2)
 
     with col1:
-        # MAC Address with blue highlight
-        mac_address = device.get('mac_address', 'Unknown')
-        st.markdown(f"**MAC Address:** <span style='color: #2196F3; font-weight: bold;'>{mac_address}</span>", unsafe_allow_html=True)
+        # MAC Address with blue highlight and monospace font
+        raw_mac = device.get('mac_address', 'Unknown')
+        mac_address = clean_mac_address(raw_mac)
+        st.markdown(f"**MAC Address:** <span class='mac-address'>{mac_address}</span>", unsafe_allow_html=True)
 
         # IP Address with green highlight
         ip_address = device.get('ip_address', '--')
@@ -141,7 +192,7 @@ with st.expander(f"{device_name}", expanded=True):
                 # Extract specific OS information
                 os_text = "Not Found"  # Default value
 
-                # Try to get details from os_details
+                # Try to get details from os_details - show only first OS result
                 if isinstance(os_details, dict):
                     # Get 'details' field (most specific info)
                     if os_details.get('details'):
@@ -159,15 +210,17 @@ with st.expander(f"{device_name}", expanded=True):
                 elif isinstance(os_details, str):
                     os_text = os_details
 
-                # Show OS Details, limit length to avoid being too long
-                if len(os_text) > 60:
-                    display_text = os_text[:60] + "..."
-                    full_text = os_text
-                else:
-                    display_text = os_text
-                    full_text = os_text
+                # Extract only the first OS detection result
+                if os_text and os_text != "Not Found":
+                    # Split by common separators and take the first result
+                    first_os = os_text.split(',')[0].split(' or ')[0].split(' / ')[0].strip()
+                    # Limit length to keep it concise
+                    if len(first_os) > 60:
+                        first_os = first_os[:60] + "..."
+                    os_text = first_os
 
-                st.markdown(f"**OS Details:** <span style='color: #795548; font-weight: bold;' title='{full_text}'>{display_text}</span>", unsafe_allow_html=True)
+                # Show only the first OS Details without expansion
+                st.markdown(f"**OS Details:** <span style='color: #795548; font-weight: bold;'>{os_text}</span>", unsafe_allow_html=True)
         else:
             # Placeholder for scan fields
             st.markdown("**Vendor:** <span style='color: #9E9E9E; font-weight: bold;'>--</span>", unsafe_allow_html=True)
@@ -301,85 +354,110 @@ if device.get('ip_address') and device.get('status') == 'online':
                     st.metric("UDP Ports", udp_count, delta=f"{udp_percentage:.1f}%")
 
                 # Create grouped bar chart for port status distribution
-                st.markdown("### 📊 Port Status Distribution")
 
-                # Prepare data for grouped bar chart
-                port_ranges = {
-                    'System Ports (0-1023)': (0, 1023),
-                    'User Ports (1024-65535)': (1024, 65535)
-                }
-
+                # Prepare data for individual port chart
                 chart_data = []
-                for range_name, (start, end) in port_ranges.items():
-                    # Filter ports in this range with better error handling
-                    range_ports = []
-                    for p in ports:
-                        try:
-                            port_num = p.get('port', '0')
-                            if isinstance(port_num, str) and '/' in port_num:
-                                port_num = port_num.split('/')[0]
-                            port_int = int(port_num)
-                            if start <= port_int <= end:
-                                range_ports.append(p)
-                        except (ValueError, TypeError):
-                            continue
-
-                    # Count by protocol and state with improved detection
-                    tcp_open = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'open'])
-                    tcp_closed = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'closed'])
-                    tcp_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'filtered'])
-                    tcp_open_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'tcp' and p.get('state') == 'open|filtered'])
-
-                    udp_open = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'open'])
-                    udp_closed = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'closed'])
-                    udp_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'filtered'])
-                    udp_open_filtered = len([p for p in range_ports if get_protocol(p.get('port', '')) == 'udp' and p.get('state') == 'open|filtered'])
-
-                    chart_data.extend([
-                        {'Port Range': range_name, 'Protocol': 'TCP', 'State': 'Open', 'Count': tcp_open},
-                        {'Port Range': range_name, 'Protocol': 'TCP', 'State': 'Closed', 'Count': tcp_closed},
-                        {'Port Range': range_name, 'Protocol': 'TCP', 'State': 'Filtered', 'Count': tcp_filtered},
-                        {'Port Range': range_name, 'Protocol': 'TCP', 'State': 'Open|Filtered', 'Count': tcp_open_filtered},
-                        {'Port Range': range_name, 'Protocol': 'UDP', 'State': 'Open', 'Count': udp_open},
-                        {'Port Range': range_name, 'Protocol': 'UDP', 'State': 'Closed', 'Count': udp_closed},
-                        {'Port Range': range_name, 'Protocol': 'UDP', 'State': 'Filtered', 'Count': udp_filtered},
-                        {'Port Range': range_name, 'Protocol': 'UDP', 'State': 'Open|Filtered', 'Count': udp_open_filtered},
-                    ])
+                
+                # Group ports by range for labeling but show individual ports
+                for p in ports:
+                    try:
+                        port_num = p.get('port', '0')
+                        if isinstance(port_num, str) and '/' in port_num:
+                            port_num = port_num.split('/')[0]
+                        port_int = int(port_num)
+                        
+                        # Determine port range label
+                        if 0 <= port_int <= 1023:
+                            port_range_label = "System Ports"
+                        else:
+                            port_range_label = "User Ports"
+                        
+                        protocol = get_protocol(p.get('port', ''))
+                        state = p.get('state', 'unknown')
+                        
+                        chart_data.append({
+                            'Port': str(port_int),
+                            'Port Range': port_range_label,
+                            'Protocol': protocol.upper(),
+                            'State': state.title(),
+                            'Service': p.get('service', 'unknown'),
+                            'Port Number': port_int
+                        })
+                        
+                    except (ValueError, TypeError):
+                        continue
+                
+                # Sort by port number for better visualization
+                chart_data.sort(key=lambda x: x['Port Number'])
 
                 # Only create chart if there is data
-                if any(item['Count'] > 0 for item in chart_data):
+                if chart_data:
                     df_chart = pd.DataFrame(chart_data)
 
-                    # Create grouped bar chart with device info in title
+                    # Create categorical bar chart for port status visualization
+                    # Sort ports by number for better display
+                    df_chart_sorted = df_chart.sort_values('Port Number')
+                    
                     fig = px.bar(
-                        df_chart,
-                        x='Port Range',
-                        y='Count',
+                        df_chart_sorted,
+                        x='Port',
+                        y=[1] * len(df_chart_sorted),  # Each port gets height of 1
                         color='State',
-                        barmode='group',
-                        facet_col='Protocol',
+                        facet_col='Port Range',
+                        facet_row='Protocol',
+                        hover_data=['Service', 'Port Number'],
                         color_discrete_map={
                             'Open': '#00ff00',
                             'Closed': '#ff0000',
                             'Filtered': '#ffff00',
-                            'Open|Filtered': '#ffa500'
-                        },
+                            'Open|Filtered': '#ffa500',
+                            'Unknown': '#888888'
+                        }
                     )
 
                     fig.update_layout(
-                        height=500,
+                        height=400,
                         showlegend=True,
-                        title=f"Port Status Distribution - {device.get('ip_address')} ({device.get('hostname', 'Unknown')})",
-                        xaxis_title="Port Range",
-                        yaxis_title="Number of Ports"
+                        title="",
+                        xaxis_title="Port Number",
+                        yaxis_title="",  # No y-axis title
+                        font=dict(size=10)
+                    )
+                    
+                    # Update facet titles to show range labels
+                    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+                    
+                    # Improve x-axis readability and hide y-axis
+                    # Set x-axis range to only show actual ports for each facet
+                    fig.update_xaxes(
+                        tickangle=45,
+                        showgrid=True, 
+                        gridwidth=1, 
+                        gridcolor='lightgray',
+                        type='category',  # Treat as categorical to avoid gaps
+                        matches=None  # Allow independent x-axes for each facet
+                    )
+                    fig.update_yaxes(
+                        showticklabels=False,  # Hide y-axis labels
+                        showgrid=False,        # Hide y-axis grid
+                        title=""               # No y-axis title
                     )
 
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Create two columns for side-by-side charts
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("#### 📊 Port Status Distribution")
+                        # Reduce chart height for side-by-side display
+                        fig.update_layout(height=400)
+                        st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.info("📊 No port data available for charts. All ports may be in the same state.")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("#### 📊 Port Status Distribution")
+                        st.info("📊 No port data available for charts.")
 
-                # Service distribution chart with status information
-                st.markdown("### 🔧 Service Distribution")
+                # Service distribution chart will go in col2
 
                 # Count services by status
                 service_status_counts = {}
@@ -449,7 +527,7 @@ if device.get('ip_address') and device.get('status') == 'online':
 
                     fig2.update_layout(
                         height=400,
-                        title=f"Service Distribution - {device.get('ip_address')} ({device.get('hostname', 'Unknown')})",
+                        title="",
                         xaxis_title="Service Name",
                         yaxis_title="Number of Ports",
                         xaxis={'categoryorder': 'array', 'categoryarray': service_order}
@@ -457,7 +535,10 @@ if device.get('ip_address') and device.get('status') == 'online':
 
                     fig2.update_xaxes(tickangle=45)
 
-                    st.plotly_chart(fig2, use_container_width=True)
+                    # Place service chart in col2
+                    with col2:
+                        st.markdown("#### 🔧 Service Distribution")
+                        st.plotly_chart(fig2, use_container_width=True)
 
                     # Add service statistics
                     st.markdown("#### 📊 Service Statistics")
@@ -477,6 +558,11 @@ if device.get('ip_address') and device.get('status') == 'online':
 
                     # Add statistics for Open|Filtered states (removed info message)
                     total_open_filtered = sum(counts['open|filtered'] for counts in service_status_counts.values())
+                else:
+                    # No service data available
+                    with col2:
+                        st.markdown("#### 🔧 Service Distribution")
+                        st.info("📊 No service data available for this device.")
 
                 # Detailed port table
                 st.markdown("### 📋 Port Details")
@@ -801,7 +887,7 @@ with st.expander("⚡ Actions", expanded=True):
 
                                 with col1:
                                     if mac_address:
-                                        st.info(f"🔗 **MAC Address:** {mac_address}")
+                                        st.info(f"🔗 **MAC Address:** {clean_mac_address(mac_address)}")
                                 with col2:
                                     if vendor:
                                         st.info(f"🏭 **Vendor:** {vendor}")

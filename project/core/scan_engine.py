@@ -148,7 +148,8 @@ class ScanEngine:
         target_ip: str,
         device_name: str = "Unknown",
         scan_type: ScanType = ScanType.PORT_SCAN,
-        fast_scan: bool = True
+        fast_scan: bool = True,
+        custom_ports: str = None
     ) -> ScanResult:
         """Scans a single device.
 
@@ -170,7 +171,7 @@ class ScanEngine:
 
         try:
             # Build the scan command based on scan type
-            command = self._build_scan_command(target_ip, scan_type, fast_scan)
+            command = self._build_scan_command(target_ip, scan_type, fast_scan, custom_ports)
             result.command = " ".join(command)
 
             # Execute the scan
@@ -302,7 +303,8 @@ class ScanEngine:
         self,
         target_ip: str,
         scan_type: ScanType,
-        fast_scan: bool = True
+        fast_scan: bool = True,
+        custom_ports: str = None
     ) -> List[str]:
         """Builds the nmap command based on scan type.
 
@@ -317,7 +319,12 @@ class ScanEngine:
         base_command = ["nmap"]
 
         if scan_type == ScanType.PORT_SCAN:
-            if fast_scan:
+            if custom_ports:
+                # Custom port scan: scan specified ports
+                return base_command + [
+                    "-sS", "-sU", "-T4", "-p", custom_ports, "--max-retries", "2", target_ip
+                ]
+            elif fast_scan:
                 # Fast port scan: scan top TCP and UDP ports
                 return base_command + [
                     "-sS", "-sU", "-T4", "--top-ports", "20", "--max-retries", "1", target_ip
@@ -347,7 +354,7 @@ class ScanEngine:
     async def _run_command(
         self,
         command: List[str],
-        timeout: int = 45
+        timeout: int = 120
     ) -> str:
         """Runs a command asynchronously and returns its output.
 
@@ -365,7 +372,7 @@ class ScanEngine:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            # Set timeout (45 seconds, leaving 5 seconds for frontend)
+            # Set timeout (120 seconds, leaving 10 seconds for frontend)
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             except asyncio.TimeoutError:

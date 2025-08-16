@@ -66,6 +66,138 @@ async def health_check():
     """健康检查端点"""
     return {"status": "healthy", "timestamp": "2025-08-11T18:30:00Z"}
 
+@app.post("/admin/reset-database")
+async def reset_database():
+    """
+    Database reset endpoint - WARNING: This will delete all data!
+    """
+    try:
+        from db.base import Base, engine
+        from db.models import Device, Experiment, Capture, ScanResult, PortInfo
+        
+        # Drop all tables
+        Base.metadata.drop_all(bind=engine)
+        
+        # Recreate all tables
+        Base.metadata.create_all(bind=engine)
+        
+        return {
+            "status": "success", 
+            "message": "Database reset completed successfully!",
+            "tables_recreated": list(Base.metadata.tables.keys())
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Database reset failed: {str(e)}"
+        }
+
+@app.post("/admin/backup-database")
+async def backup_database():
+    """
+    Create a backup of the current database
+    """
+    import shutil
+    from datetime import datetime
+    
+    try:
+        db_path = "data/iotlab.db"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = f"data/iotlab_backup_{timestamp}.db"
+        
+        # Copy the database file
+        shutil.copy2(db_path, backup_path)
+        
+        return {
+            "status": "success",
+            "message": f"Database backup created successfully!",
+            "backup_file": backup_path
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Database backup failed: {str(e)}"
+        }
+
+@app.get("/admin/list-backups")
+async def list_backups():
+    """
+    List all available database backup files
+    """
+    import os
+    import glob
+    from datetime import datetime
+    
+    try:
+        backup_pattern = "data/iotlab_backup_*.db"
+        backup_files = glob.glob(backup_pattern)
+        
+        backups = []
+        for backup_file in sorted(backup_files, reverse=True):  # 最新的在前
+            file_stats = os.stat(backup_file)
+            backups.append({
+                "filename": os.path.basename(backup_file),
+                "filepath": backup_file,
+                "size": file_stats.st_size,
+                "created": datetime.fromtimestamp(file_stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            })
+        
+        return {
+            "status": "success",
+            "backups": backups,
+            "count": len(backups)
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to list backups: {str(e)}"
+        }
+
+@app.post("/admin/restore-database")
+async def restore_database(backup_filename: str = Body(..., embed=True)):
+    """
+    Restore database from a backup file
+    """
+    import shutil
+    import os
+    
+    try:
+        # Validate backup file exists
+        backup_path = f"data/{backup_filename}"
+        if not os.path.exists(backup_path):
+            return {
+                "status": "error",
+                "message": f"Backup file {backup_filename} not found!"
+            }
+        
+        # Create backup of current database before restore
+        current_db = "data/iotlab.db"
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pre_restore_backup = f"data/iotlab_pre_restore_{timestamp}.db"
+        
+        if os.path.exists(current_db):
+            shutil.copy2(current_db, pre_restore_backup)
+        
+        # Restore from backup
+        shutil.copy2(backup_path, current_db)
+        
+        return {
+            "status": "success",
+            "message": f"Database restored successfully from {backup_filename}!",
+            "restored_from": backup_path,
+            "pre_restore_backup": pre_restore_backup
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Database restore failed: {str(e)}"
+        }
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """主页 - 提供API信息和导航链接"""

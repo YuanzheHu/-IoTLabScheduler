@@ -32,7 +32,7 @@ def get_db():
 class ScanRequest(BaseModel):
     subnet: str
 
-@router.post("/scan", response_model=List[Dict[str, str]])
+@router.post("/scan", response_model=List[Dict[str, Any]])
 def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
     """Scans a subnet for devices and returns device information (online and offline).
 
@@ -132,16 +132,23 @@ def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
         result = []
         for d in all_devices:
             result.append({
+                'id': d.id,
                 'mac_address': d.mac_address,
                 'hostname': d.hostname,
                 'ip_address': d.ip_address or '',
-                'status': d.status
+                'status': d.status,
+                'vendor': d.vendor,
+                'network_distance': d.network_distance,
+                'latency': d.latency,
+                'os_details': d.os_details,
+                'scan_summary': d.scan_summary,
+                'last_seen': d.last_seen
             })
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
-@router.get("/", response_model=List[Dict[str, str]])
+@router.get("/", response_model=List[Dict[str, Any]])
 def get_devices(db: Session = Depends(get_db)):
     """Get all devices from database.
 
@@ -153,10 +160,17 @@ def get_devices(db: Session = Depends(get_db)):
         result = []
         for d in devices:
             result.append({
+                'id': d.id,
                 'mac_address': d.mac_address,
                 'hostname': d.hostname,
                 'ip_address': d.ip_address or '',
-                'status': d.status
+                'status': d.status,
+                'vendor': d.vendor,
+                'network_distance': d.network_distance,
+                'latency': d.latency,
+                'os_details': d.os_details,
+                'scan_summary': d.scan_summary,
+                'last_seen': d.last_seen
             })
         return result
     except Exception as e:
@@ -227,7 +241,9 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
         result = await scan_engine.scan_single_device(
             target_ip=ip,
             device_name=f"Device {ip}",
-            scan_type=ScanType.PORT_SCAN
+            scan_type=ScanType.PORT_SCAN,
+            fast_scan=fast_scan,
+            custom_ports=ports
         )
         
         if result.error:
@@ -314,7 +330,8 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
         result = await scan_engine.scan_single_device(
             target_ip=ip,
             device_name=f"Device {ip}",
-            scan_type=ScanType.OS_SCAN
+            scan_type=ScanType.OS_SCAN,
+            fast_scan=fast_scan
         )
         
         if result.error:
