@@ -1079,10 +1079,10 @@ with col4:
     st.metric("Unique Vendors", unique_vendors)
     st.metric("Total Services", total_services)
 
-# Tab-based layout for different visualizations
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "🔍 Scan Status", "📊 IP vs Ports", "🔧 Service Analysis", "🖥️ OS Analysis", 
-    "📈 Port Distribution", "🔒 Risk Assessment", "📊 Advanced Charts"
+# Tab-based layout for different visualizations (removed Risk Assessment and Advanced Charts)
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🔍 Scan Status", "📊 IP vs Ports", "🔧 Service Analysis", "🖥️ OS Analysis",
+    "📈 Port Distribution"
 ])
 
 with tab1:
@@ -1488,101 +1488,6 @@ with tab5:
             """)
     else:
         st.info("📊 No port distribution data available. Please run port scans on devices first to see protocol and range analysis.")
-
-# ============================================================================
-# NEW TAB CONTENT
-# ============================================================================
-
-with tab7:
-    st.markdown("### 🔒 Risk Assessment - Device Security Analysis")
-    st.markdown("""
-    📌 **Risk Assessment Features**: 
-    - **Risk Scoring**: Comprehensive security risk evaluation for each device
-    - **Risk Factors**: Analysis of open ports, open|filtered ports, high-risk services, network exposure
-    - **Recommendations**: Actionable security recommendations for each device
-    - **Risk Distribution**: Overview of network security posture
-    
-    **Risk Factors Considered**:
-    - 🟢 **Low Risk (0-24)**: Device appears secure
-    - 🟡 **Medium Risk (25-59)**: Some security concerns
-    - 🔴 **High Risk (60-99)**: Significant security vulnerabilities
-    - ⚫ **Critical Risk (100+)**: Critical security vulnerabilities requiring immediate attention
-    
-    **Focus Areas**:
-    - 🔴 **Open Ports**: Each open port adds 12 risk points
-    - 🟠 **Open|Filtered Ports**: Each open|filtered port adds 8 risk points
-    - 🔴 **High-Risk Services**: SSH, Telnet, FTP, VNC, RDP, etc.
-    - 🔴 **Vulnerable Ports**: Common vulnerable port numbers
-    """)
-    
-    # Create risk assessment charts
-    risk_summary_charts = create_risk_summary_chart(comprehensive_data)
-    
-    if risk_summary_charts:
-        fig1, fig2 = risk_summary_charts
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(fig1, use_container_width=True)
-        with col2:
-            st.plotly_chart(fig2, use_container_width=True)
-        
-        # Risk details table
-        st.markdown("#### 📋 Device Risk Details")
-        risk_details_table = create_risk_details_table(comprehensive_data)
-        
-        if risk_details_table is not None:
-            st.dataframe(risk_details_table, use_container_width=True)
-            
-            # Risk statistics
-            st.markdown("#### 📊 Risk Assessment Statistics")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                total_devices = len(risk_details_table)
-                st.metric("Total Devices", total_devices)
-            
-            with col2:
-                high_risk_devices = len(risk_details_table[risk_details_table['Risk Level'] == 'High'])
-                st.metric("🔴 High Risk", high_risk_devices)
-            
-            with col3:
-                medium_risk_devices = len(risk_details_table[risk_details_table['Risk Level'] == 'Medium'])
-                st.metric("🟡 Medium Risk", medium_risk_devices)
-            
-            with col4:
-                low_risk_devices = len(risk_details_table[risk_details_table['Risk Level'] == 'Low'])
-                st.metric("🟢 Low Risk", low_risk_devices)
-            
-            # Top recommendations
-            st.markdown("#### 💡 Top Security Recommendations")
-            
-            # Collect all recommendations
-            all_recommendations = []
-            for device in comprehensive_data:
-                risk_score = calculate_device_risk_score(device)
-                all_recommendations.extend(risk_score['recommendations'])
-            
-            # Count recommendation frequency
-            recommendation_counts = {}
-            for rec in all_recommendations:
-                recommendation_counts[rec] = recommendation_counts.get(rec, 0) + 1
-            
-            # Display top recommendations
-            if recommendation_counts:
-                top_recommendations = sorted(recommendation_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-                
-                for i, (recommendation, count) in enumerate(top_recommendations, 1):
-                    st.markdown(f"**{i}.** {recommendation} *(applies to {count} devices)*")
-            else:
-                st.info("✅ All devices appear to be secure!")
-        else:
-            st.info("📊 No risk assessment data available.")
-    else:
-        st.info("📊 No risk assessment data available.")
-
-# Advanced Charts section removed - integrated into other tabs
 
 # Data Export Section
 st.markdown("---")

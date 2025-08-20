@@ -977,25 +977,50 @@ with st.expander("⚡ Actions", expanded=True):
                         start_time = datetime.datetime.fromisoformat(exp['start_time'])
                         st.metric("Start Time", start_time.strftime('%H:%M:%S'))
 
-                        # Add refresh button to check current status
-                        if st.button(f"🔄 Refresh Status", key=f"refresh_exp_{exp['id']}"):
-                            try:
-                                status_resp = requests.get(f"{EXPERIMENTS_URL}/{exp['id']}/status/v2", timeout=10)
-                                if status_resp.status_code == 200:
-                                    status_data = status_resp.json()
-                                    st.success(f"✅ Status: {status_data.get('status', 'Unknown')}")
-                                    st.info(f"📈 Progress: {status_data.get('progress', 'N/A')}")
+                    # Configuration summary block
+                    st.markdown("#### Configuration")
+                    cfg_lines = []
+                    atype = exp.get('attack_type') or 'N/A'
+                    mode = exp.get('attack_mode') or 'single'
+                    iface = exp.get('interface') or 'N/A'
+                    duration = exp.get('duration_sec')
+                    port = exp.get('port')
+                    cycles_val = exp.get('cycles')
+                    settle_val = exp.get('settle_time_sec')
 
-                                    # Update session state with latest info
-                                    exp.update({
-                                        "status": status_data.get('status'),
-                                        "current_cycle": status_data.get('current_cycle'),
-                                        "progress": status_data.get('progress')
-                                    })
-                                else:
-                                    st.error(f"❌ Failed to fetch status: {status_resp.text}")
-                            except Exception as e:
-                                st.error(f"❌ Error fetching status: {e}")
+                    cfg_lines.append(f"- Attack Type: `{atype}`")
+                    cfg_lines.append(f"- Attack Mode: `{mode}`")
+                    cfg_lines.append(f"- Interface: `{iface}`")
+                    if atype != 'icmp_flood' and port:
+                        cfg_lines.append(f"- Port: `{port}`")
+                    if duration is not None:
+                        cfg_lines.append(f"- Duration (sec): `{duration}`")
+                    if mode == 'cyclic':
+                        if cycles_val is not None:
+                            cfg_lines.append(f"- Cycles: `{cycles_val}`")
+                        if settle_val is not None:
+                            cfg_lines.append(f"- Settle Time (sec): `{settle_val}`")
+                    st.markdown("\n".join(cfg_lines))
+
+                    # Add refresh button to check current status
+                    if st.button(f"🔄 Refresh Status", key=f"refresh_exp_{exp['id']}"):
+                        try:
+                            status_resp = requests.get(f"{EXPERIMENTS_URL}/{exp['id']}/status/v2", timeout=10)
+                            if status_resp.status_code == 200:
+                                status_data = status_resp.json()
+                                st.success(f"✅ Status: {status_data.get('status', 'Unknown')}")
+                                st.info(f"📈 Progress: {status_data.get('progress', 'N/A')}")
+
+                                # Update session state with latest info
+                                exp.update({
+                                    "status": status_data.get('status'),
+                                    "current_cycle": status_data.get('current_cycle'),
+                                    "progress": status_data.get('progress')
+                                })
+                            else:
+                                st.error(f"❌ Failed to fetch status: {status_resp.text}")
+                        except Exception as e:
+                            st.error(f"❌ Error fetching status: {e}")
 
         # DoS Attack Experiment Form V2
         if st.session_state.get("show_dos_form", False):
@@ -1007,16 +1032,30 @@ with st.expander("⚡ Actions", expanded=True):
                 .dos-form .stSelectbox>div>div>select {
                     background-color: #f7f7fa;
                 }
+                .disabled-field {
+                    opacity: 0.5;
+                    pointer-events: none;
+                }
                 </style>
                 """,
                 unsafe_allow_html=True,
             )
 
-            with st.form(key="dos_attack_form_v2"):
+            # Remove st.form to enable dynamic UI
+            with st.container():
                 st.markdown(
                     f"<div class='dos-form'><b>🚀 Start a DoS Attack Experiment V2 on this device</b></div>",
                     unsafe_allow_html=True,
                 )
+                
+                # Show attack mode explanation
+                st.markdown("""
+                <div style='background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;'>
+                <b>Attack Modes:</b><br>
+                • <b>Single</b>: Execute attack once for the specified duration<br>
+                • <b>Cyclic</b>: Repeat attack multiple times with rest periods between cycles
+                </div>
+                """, unsafe_allow_html=True)
 
                 # Basic configuration
                 dos_name = st.text_input(
@@ -1029,6 +1068,7 @@ with st.expander("⚡ Actions", expanded=True):
                         "Attack Type",
                         ["syn_flood", "udp_flood", "icmp_flood", "tcp_flood", "ip_frag_flood"],
                         index=0,
+                        format_func=lambda x: f"{x} {'(no port)' if x == 'icmp_flood' else ''}"
                     )
                     attack_mode = st.selectbox(
                         "Attack Mode",
@@ -1038,9 +1078,19 @@ with st.expander("⚡ Actions", expanded=True):
                     )
 
                 with col2:
-                    dos_port = st.number_input(
-                        "Port", value=55443, min_value=1, max_value=65535
-                    )
+                    # Port field - show info for ICMP attacks
+                    if attack_type == "icmp_flood":
+                        st.info("🔒 Port not applicable for ICMP")
+                        dos_port = 0  # ICMP doesn't use ports
+                    else:
+                        dos_port = st.number_input(
+                            "Port", 
+                            value=55443, 
+                            min_value=1, 
+                            max_value=65535,
+                            key="dos_port_input"
+                        )
+                    
                     interface = st.selectbox(
                         "Network Interface",
                         ["wlan0", "eth0", "any"],
@@ -1049,45 +1099,105 @@ with st.expander("⚡ Actions", expanded=True):
                     )
 
                 # Duration and timing configuration
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    dos_duration = st.number_input(
-                        "Attack Duration (sec)",
-                        value=60,
-                        min_value=1,
-                        max_value=3600,
-                        help="Duration of each attack cycle"
-                    )
-
-                with col2:
-                    cycles = st.number_input(
-                        "Cycles",
-                        value=1,
-                        min_value=1,
-                        max_value=100,
-                        help="Number of attack cycles (for cyclic mode)"
-                    )
-
-                with col3:
-                    settle_time = st.number_input(
-                        "Settle Time (sec)",
-                        value=30,
-                        min_value=0,
-                        max_value=300,
-                        help="Time between attack cycles"
-                    )
-
-                # Show total estimated time
-                if attack_mode == "cyclic" and cycles > 1:
+                st.markdown("### ⏱️ Timing Configuration")
+                
+                if attack_mode == "single":
+                    # Single mode: only duration is relevant
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        dos_duration = st.number_input(
+                            "Attack Duration (sec)",
+                            value=60,
+                            min_value=1,
+                            max_value=3600,
+                            help="Total duration of the attack",
+                            key="single_duration"
+                        )
+                    with col2:
+                        st.info("ℹ️ Single mode executes once")
+                        st.metric("Total Time", f"{dos_duration} sec")
+                    
+                    # Set default values for unused parameters
+                    cycles = 1
+                    settle_time = 0
+                    
+                else:  # cyclic mode
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        dos_duration = st.number_input(
+                            "Cycle Duration (sec)",
+                            value=60,
+                            min_value=1,
+                            max_value=3600,
+                            help="Duration of each attack cycle",
+                            key="cycle_duration"
+                        )
+                    
+                    with col2:
+                        cycles = st.number_input(
+                            "Number of Cycles",
+                            value=3,
+                            min_value=2,
+                            max_value=100,
+                            help="How many times to repeat the attack",
+                            key="num_cycles"
+                        )
+                    
+                    with col3:
+                        settle_time = st.number_input(
+                            "Settle Time (sec)",
+                            value=30,
+                            min_value=1,
+                            max_value=300,
+                            help="Rest time between attack cycles",
+                            key="settle_time"
+                        )
+                    
+                    # Show total estimated time for cyclic mode
                     total_time = (dos_duration * cycles) + (settle_time * (cycles - 1))
                     st.info(f"⏱️ Total estimated time: {total_time} seconds ({total_time/60:.1f} minutes)")
+                    
+                    # Show attack timeline
+                    st.markdown("""
+                    <div style='background-color: #e8f4f8; padding: 10px; border-radius: 5px; margin-top: 10px;'>
+                    <b>Attack Timeline:</b><br>
+                    """ + "<br>".join([f"• Cycle {i+1}: Attack for {dos_duration}s" + 
+                                     (f" → Rest for {settle_time}s" if i < cycles-1 else "") 
+                                     for i in range(cycles)]) + 
+                    "</div>", unsafe_allow_html=True)
 
+                # Configuration Summary
+                st.markdown("### 📋 Configuration Summary")
+                summary_col1, summary_col2 = st.columns(2)
+                with summary_col1:
+                    st.markdown(f"""
+                    **Attack Details:**
+                    - Type: `{attack_type}` {' (no port)' if attack_type == 'icmp_flood' else f' on port {dos_port}'}
+                    - Mode: `{attack_mode}`
+                    - Interface: `{interface}`
+                    """)
+                with summary_col2:
+                    if attack_mode == "single":
+                        st.markdown(f"""
+                        **Timing:**
+                        - Duration: {dos_duration} seconds
+                        - Total time: {dos_duration} seconds
+                        """)
+                    else:
+                        st.markdown(f"""
+                        **Timing:**
+                        - {cycles} cycles × {dos_duration}s each
+                        - Settle time: {settle_time}s between cycles
+                        - Total time: {(dos_duration * cycles) + (settle_time * (cycles - 1))}s
+                        """)
+                
                 # Action buttons
+                st.markdown("---")
                 col1, col2 = st.columns(2)
                 with col1:
-                    submitted = st.form_submit_button("🚀 Start DoS Attack V2", use_container_width=True)
+                    submitted = st.button("🚀 Start DoS Attack V2", use_container_width=True, key="submit_dos_attack", type="primary")
                 with col2:
-                    cancel = st.form_submit_button("❌ Cancel", use_container_width=True)
+                    cancel = st.button("❌ Cancel", use_container_width=True, key="cancel_dos_attack")
 
                 if cancel:
                     st.session_state["show_dos_form"] = False
@@ -1100,13 +1210,16 @@ with st.expander("⚡ Actions", expanded=True):
                         "name": dos_name,
                         "attack_type": attack_type,
                         "target_ip": device.get('ip_address'),
-                        "port": dos_port,
                         "duration_sec": dos_duration,
                         "interface": interface,
                         "attack_mode": attack_mode,
                         "cycles": cycles,
                         "settle_time_sec": settle_time
                     }
+                    
+                    # Only add port for attacks that use it
+                    if attack_type != "icmp_flood":
+                        payload["port"] = dos_port
 
                     try:
                         # Use V2 API endpoint
