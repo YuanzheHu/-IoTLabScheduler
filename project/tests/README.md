@@ -1,160 +1,160 @@
-# IoT Lab Scheduler - 精简测试指南
+# IoT Lab Scheduler - Streamlined Testing Guide
 
-本目录包含了IoT设备管理系统的**核心测试脚本**。所有测试都兼容pytest框架，功能全面且高效。
+This directory contains the **core test scripts** for the IoT device management system. All tests are compatible with the pytest framework, comprehensive and efficient.
 
-## 📂 精简后的测试文件
+## 📂 Streamlined Test Files
 
-### 🎯 **3个核心测试文件（已精简优化）**
+### 🎯 **3 Core Test Files (Streamlined and Optimized)**
 
-1. **`test_system_verification.py`** - 🔍 **系统全面验证测试**
-   - API健康检查
-   - 前端可访问性验证
-   - 数据库连接和结构验证
-   - 网络发现功能测试
-   - 端口扫描和OS扫描功能验证
-   - **推荐首先运行**
+1. **`test_system_verification.py`** - 🔍 **Comprehensive System Verification Tests**
+   - API health checks
+   - Frontend accessibility verification
+   - Database connection and structure validation
+   - Network discovery functionality testing
+   - Port scanning and OS scanning functionality verification
+   - **Recommended to run first**
 
-2. **`test_batch_scan.py`** - 🚀 **批量扫描测试套件**
-   - 快速系统检查（3设备验证）
-   - 批量端口扫描（串行/并行）
-   - 批量OS扫描（指纹识别）
-   - 组合扫描测试（端口+OS）
-   - 特定设备扫描
-   - **包含所有扫描功能**
+2. **`test_batch_scan.py`** - 🚀 **Batch Scanning Test Suite**
+   - Quick system check (3 device verification)
+   - Batch port scanning (sequential/parallel)
+   - Batch OS scanning (fingerprinting)
+   - Combined scanning tests (port + OS)
+   - Specific device scanning
+   - **Includes all scanning functionality**
 
-3. **`test_batch_attacks.py`** - ⚔️ **网络安全攻击测试**
-   - 循环攻击测试
-   - 并行攻击测试
-   - 网络安全评估
-   - **独特的安全测试功能**
+3. **`test_batch_attacks.py`** - ⚔️ **Network Security Attack Testing**
+   - Cyclic attack testing
+   - Parallel attack testing
+   - Network security assessment
+   - **Unique security testing functionality**
 
-### ⚙️ 配置文件
-- **`conftest.py`** - pytest配置文件
-- **`__init__.py`** - Python包初始化文件
+### ⚙️ Configuration Files
+- **`conftest.py`** - pytest configuration file
+- **`__init__.py`** - Python package initialization file
 
-## 🚀 运行方法
+## 🚀 Running Methods
 
-### 前置条件
-1. 确保Docker容器正在运行：
+### Prerequisites
+1. Ensure Docker containers are running:
    ```bash
    sudo docker-compose up -d
    ```
 
-2. 验证API服务可用：
+2. Verify API service availability:
    ```bash
    curl http://localhost:8000/health
    ```
 
-### 1. 使用pytest运行（推荐）
+### 1. Using pytest (Recommended)
 
-#### 运行所有测试
+#### Run All Tests
 ```bash
-# 在项目根目录运行
+# Run from project root directory
 pytest project/tests/ -v -s
 
-# 或者进入project目录运行
+# Or run from project directory
 cd project
 pytest tests/ -v -s
 ```
 
-#### 运行特定测试文件
+#### Run Specific Test Files
 ```bash
-# 🔍 系统验证测试（推荐首先运行）
+# 🔍 System verification tests (recommended to run first)
 pytest project/tests/test_system_verification.py -v -s
 
-# 🚀 批量扫描测试（包含所有扫描功能）
+# 🚀 Batch scanning tests (includes all scanning functionality)
 pytest project/tests/test_batch_scan.py -v -s
 
-# ⚔️ 网络安全攻击测试
+# ⚔️ Network security attack tests
 pytest project/tests/test_batch_attacks.py -v -s
 ```
 
-#### 运行特定测试方法
+#### Run Specific Test Methods
 ```bash
-# 🔍 系统验证
+# 🔍 System verification
 pytest project/tests/test_system_verification.py::TestSystemVerification::test_system_verification -v -s
 
-# 🚀 快速扫描检查（3设备验证）
+# 🚀 Quick scanning check (3 device verification)
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_quick_system_check -v -s
 
-# 🚀 批量端口扫描（顺序）
+# 🚀 Batch port scanning (sequential)
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_batch_port_scan_sequential -v -s
 
-# 🚀 批量端口扫描（并行）
+# 🚀 Batch port scanning (parallel)
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_batch_port_scan_parallel -v -s
 
-# 🚀 OS扫描
+# 🚀 OS scanning
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_batch_os_scan_sequential -v -s
 
-# 🚀 组合扫描（端口+OS）
+# 🚀 Combined scanning (port + OS)
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_combined_port_and_os_scan -v -s
 
-# ⚔️ 安全攻击测试
+# ⚔️ Security attack testing
 pytest project/tests/test_batch_attacks.py::TestBatchAttacks::test_batch_cyclic_attacks_sequential -v -s
 ```
 
-### 2. 独立运行Python脚本
+### 2. Running Python Scripts Independently
 
 ```bash
-# 进入tests目录
+# Enter tests directory
 cd project/tests
 
-# 🔍 系统验证
+# 🔍 System verification
 python3 test_system_verification.py
 
-# 🚀 批量扫描（需要处理导入路径）
+# 🚀 Batch scanning (requires import path handling)
 PYTHONPATH=.. python3 test_batch_scan.py
 
-# ⚔️ 批量攻击（需要处理导入路径）
+# ⚔️ Batch attacks (requires import path handling)
 PYTHONPATH=.. python3 test_batch_attacks.py
 ```
 
-## 📊 推荐测试顺序
+## 📊 Recommended Test Sequence
 
-### 🎯 新系统首次验证（3步骤）
-1. **🔍 系统验证测试**（必须首先运行）
+### 🎯 New System First-Time Verification (3 Steps)
+1. **🔍 System verification tests** (must run first)
    ```bash
    pytest project/tests/test_system_verification.py -v -s
    ```
 
-2. **🚀 快速扫描检查**（验证核心扫描功能）
+2. **🚀 Quick scanning check** (verify core scanning functionality)
    ```bash
    pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_quick_system_check -v -s
    ```
 
-3. **🚀 完整扫描测试**（全面功能验证）
+3. **🚀 Complete scanning tests** (comprehensive functionality verification)
    ```bash
    pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_combined_port_and_os_scan -v -s
    ```
 
-### 📅 日常测试
+### 📅 Daily Testing
 ```bash
-# 🔍 快速系统检查
+# 🔍 Quick system check
 pytest project/tests/test_system_verification.py -v -s
 
-# 🚀 快速扫描验证（3设备）
+# 🚀 Quick scanning verification (3 devices)
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_quick_system_check -v -s
 ```
 
-### 🔄 完整回归测试
+### 🔄 Complete Regression Testing
 ```bash
-# 运行所有核心测试
+# Run all core tests
 pytest project/tests/ -v -s --tb=short
 ```
 
-## 🔧 测试配置
+## 🔧 Test Configuration
 
-### 网络配置
-所有测试默认使用以下配置：
-- **API地址**: `http://localhost:8000`
-- **Streamlit地址**: `http://localhost:8501`  
-- **扫描子网**: `10.12.0.0/24`
-- **端口扫描超时**: 120秒
-- **OS扫描超时**: 180秒
-- **OS扫描端口**: `22,80,443`
+### Network Configuration
+All tests use the following default configuration:
+- **API Address**: `http://localhost:8000`
+- **Streamlit Address**: `http://localhost:8501`  
+- **Scan Subnet**: `10.12.0.0/24`
+- **Port Scan Timeout**: 120 seconds
+- **OS Scan Timeout**: 180 seconds
+- **OS Scan Ports**: `22,80,443`
 
-### 修改配置
-可以在每个测试文件的顶部修改配置参数：
+### Modifying Configuration
+You can modify configuration parameters at the top of each test file:
 
 ```python
 # Configuration
@@ -167,105 +167,98 @@ OS_SCAN_PORTS = "22,80,443"
 MAX_WORKERS = 3
 ```
 
-## 📄 测试输出
+## 📄 Test Output
 
-### 结果文件
-精简后的测试会生成以下核心输出文件：
-- `system_verification_YYYYMMDD_HHMMSS.json` - 🔍 系统验证详细结果
-- `sequential_port_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 顺序端口扫描结果
-- `parallel_port_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 并行端口扫描结果  
-- `sequential_os_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 OS扫描结果
-- `combined_port_os_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 组合扫描结果
-- `batch_attack_results_YYYYMMDD_HHMMSS.json` - ⚔️ 攻击测试结果
+### Result Files
+Streamlined tests generate the following core output files:
+- `system_verification_YYYYMMDD_HHMMSS.json` - 🔍 System verification detailed results
+- `sequential_port_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 Sequential port scan results
+- `parallel_port_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 Parallel port scan results  
+- `sequential_os_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 OS scan results
+- `combined_port_os_scan_results_YYYYMMDD_HHMMSS.json` - 🚀 Combined scan results
+- `batch_attack_results_YYYYMMDD_HHMMSS.json` - ⚔️ Attack test results
 
-### 日志输出
-所有测试都会输出详细的实时日志，包括：
-- 扫描进度
-- 设备发现信息
-- 扫描结果统计
-- 错误信息
-- 性能指标
+### Log Output
+All tests output detailed real-time logs including:
+- Scan progress
+- Device discovery information
+- Scan result statistics
+- Error messages
+- Performance metrics
 
-## 🐛 故障排除
+## 🐛 Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **容器未启动**
+1. **Containers Not Started**
    ```bash
    sudo docker-compose up -d
    sleep 10
    curl http://localhost:8000/health
    ```
 
-2. **权限问题**
+2. **Permission Issues**
    ```bash
    sudo chmod 666 project/data/iotlab.db
    ```
 
-3. **网络问题**
-   - 检查子网配置是否正确
-   - 确保设备在目标网络中
-   - 验证nmap权限
+3. **Network Issues**
+   - Check if subnet configuration is correct
+   - Ensure devices are in the target network
+   - Verify nmap permissions
 
-4. **pytest导入错误**
+4. **pytest Import Errors**
    ```bash
-   # 确保在正确目录运行
+   # Ensure running from correct directory
    cd /path/to/IoTLabScheduler
    PYTHONPATH=project pytest project/tests/ -v -s
    ```
 
-5. **测试超时**
-   - 增加超时时间配置
-   - 减少并发工作线程数
-   - 检查网络连接
+5. **Test Timeouts**
+   - Increase timeout configuration
+   - Reduce concurrent worker threads
+   - Check network connectivity
 
-### 调试模式
+### Debug Mode
 ```bash
-# 详细输出模式
+# Detailed output mode
 pytest project/tests/test_system_verification.py -v -s --tb=long
 
-# 在第一个失败时停止
+# Stop at first failure
 pytest project/tests/ -v -s -x
 
-# 显示最慢的测试
+# Show slowest tests
 pytest project/tests/ --durations=10
 ```
 
-## 📈 性能参考
+## 📈 Performance Reference
 
-### 典型执行时间（精简后）
-- **🔍 系统验证测试**: ~30秒
-- **🚀 快速扫描检查**: ~2-3分钟（3台设备）
-- **🚀 完整批量扫描**: ~10-15分钟（所有在线设备，并行）
-- **⚔️ 安全攻击测试**: ~5-10分钟（取决于攻击配置）
-
-### 资源使用
-- **网络带宽**: 中等（扫描期间）
-- **CPU使用**: 低-中等
-- **内存使用**: 低
-- **磁盘使用**: 低（结果文件几MB）
+### Typical Execution Time (After Streamlining)
+- **🔍 System verification tests**: ~30 seconds
+- **🚀 Quick scanning check**: ~2-3 minutes (3 devices)
+- **🚀 Complete batch scanning**: ~10-15 minutes (all online devices, parallel)
+- **⚔️ Security attack tests**: ~5-10 minutes (depends on attack configuration)
 
 ---
-
-## 🎯 精简后快速开始
+## 🎯 Quick Start After Streamlining
 
 ```bash
-# 1. 启动系统
+# 1. Start system
 sudo docker-compose up -d
 
-# 2. 🔍 系统验证（必须）
+# 2. 🔍 System verification (required)
 pytest project/tests/test_system_verification.py -v -s
 
-# 3. 🚀 快速功能测试（3设备验证）
+# 3. 🚀 Quick functionality test (3 device verification)
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_quick_system_check -v -s
 
-# 4. 🚀 完整功能测试（可选）
+# 4. 🚀 Complete functionality test (optional)
 pytest project/tests/test_batch_scan.py::TestBatchPortScan::test_combined_port_and_os_scan -v -s
 ```
 
-如果前3个测试通过，你的IoT设备管理系统就已经完全正常工作了！🎉
+If the first 3 tests pass, your IoT device management system is fully operational! 🎉
 
-### 📊 测试覆盖
-- **3个核心文件** 覆盖所有重要功能
-- **6个主要测试方法** 验证系统各个方面  
-- **精简50%代码量** 但保持100%功能覆盖
+### 📊 Test Coverage
+- **3 core files** cover all important functionality
+- **6 main test methods** verify all aspects of the system  
+- **50% code reduction** while maintaining 100% functionality coverage

@@ -33,7 +33,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="IoTLab Scheduler", version="1.0.0")
 
-# CORS配置
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,20 +42,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载静态文件和模板（如果目录存在）
+# Mount static files and templates (if directories exist)
 try:
     app.mount("/static", StaticFiles(directory="static"), name="static")
 except RuntimeError:
-    # 如果static目录不存在，跳过挂载
+    # Skip mounting if static directory doesn't exist
     pass
 
 try:
     templates = Jinja2Templates(directory="templates")
 except Exception:
-    # 如果templates目录不存在，设置为None
+    # Set to None if templates directory doesn't exist
     templates = None
 
-# 注册API路由 - 只保留核心功能
+# Register API routers - keep only core functionality
 app.include_router(devices_router)
 app.include_router(experiments_router)
 app.include_router(captures_router)
@@ -63,7 +63,7 @@ app.include_router(scan_results_router)
 
 @app.get("/health")
 async def health_check():
-    """健康检查端点"""
+    """Health check endpoint"""
     return {"status": "healthy", "timestamp": "2025-08-11T18:30:00Z"}
 
 @app.post("/admin/reset-database")
@@ -135,7 +135,7 @@ async def list_backups():
         backup_files = glob.glob(backup_pattern)
         
         backups = []
-        for backup_file in sorted(backup_files, reverse=True):  # 最新的在前
+        for backup_file in sorted(backup_files, reverse=True):  # Latest first
             file_stats = os.stat(backup_file)
             backups.append({
                 "filename": os.path.basename(backup_file),
@@ -200,7 +200,7 @@ async def restore_database(backup_filename: str = Body(..., embed=True)):
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """主页 - 提供API信息和导航链接"""
+    """Home page - provides API information and navigation links"""
     html_content = """
     <!DOCTYPE html>
     <html>
@@ -223,52 +223,52 @@ async def root():
     <body>
         <div class="container">
             <h1>🔬 IoT Lab Experiment Scheduler</h1>
-            <p style="text-align: center; color: #7f8c8d;">IoT设备网络实验调度系统</p>
+            <p style="text-align: center; color: #7f8c8d;">IoT Device Network Experiment Scheduling System</p>
             
             <div class="service">
-                <h3>📚 API 文档</h3>
-                <p>查看完整的API文档和交互式测试界面</p>
-                <a href="/docs" target="_blank">访问 API 文档 →</a>
-                <span class="status online">在线</span>
+                <h3>📚 API Documentation</h3>
+                <p>View complete API documentation and interactive testing interface</p>
+                <a href="/docs" target="_blank">Access API Documentation →</a>
+                <span class="status online">Online</span>
             </div>
             
             <div class="service">
                 <h3>📊 Flower Dashboard</h3>
-                <p>监控Celery任务执行状态和队列管理</p>
-                <a href="http://localhost:5555" target="_blank">访问 Flower Dashboard →</a>
-                <span class="status online">在线</span>
+                <p>Monitor Celery task execution status and queue management</p>
+                <a href="http://localhost:5555" target="_blank">Access Flower Dashboard →</a>
+                <span class="status online">Online</span>
             </div>
             
             <div class="service">
                 <h3>🎨 Streamlit UI</h3>
-                <p>图形化设备管理和实验调度界面</p>
-                <a href="http://localhost:8501" target="_blank">访问 Streamlit UI →</a>
-                <span class="status online">在线</span>
+                <p>Graphical device management and experiment scheduling interface</p>
+                <a href="http://localhost:8501" target="_blank">Access Streamlit UI →</a>
+                <span class="status online">Online</span>
             </div>
             
             <div class="service">
-                <h3>🔧 主要功能</h3>
+                <h3>🔧 Main Features</h3>
                 <ul>
-                    <li><strong>设备发现</strong>: 子网扫描和设备管理</li>
-                    <li><strong>端口扫描</strong>: 设备端口和操作系统指纹识别</li>
-                    <li><strong>网络攻击实验</strong>: SYN/UDP/ICMP洪水攻击测试</li>
-                    <li><strong>流量捕获</strong>: 自动PCAP捕获和归档</li>
-                    <li><strong>实时监控</strong>: 实验状态跟踪和日志流</li>
-                    <li><strong>Shell脚本管理</strong>: 脚本上传、执行和实时监控</li>
+                    <li><strong>Device Discovery</strong>: Subnet scanning and device management</li>
+                    <li><strong>Port Scanning</strong>: Device port and operating system fingerprinting</li>
+                    <li><strong>Network Attack Experiments</strong>: SYN/UDP/ICMP flood attack testing</li>
+                    <li><strong>Traffic Capture</strong>: Automatic PCAP capture and archiving</li>
+                    <li><strong>Real-time Monitoring</strong>: Experiment status tracking and log streaming</li>
+                    <li><strong>Shell Script Management</strong>: Script upload, execution and real-time monitoring</li>
                 </ul>
             </div>
             
             <div class="service">
-                <h3>📡 API 端点</h3>
+                <h3>📡 API Endpoints</h3>
                 <ul>
-                    <li><code>GET /devices/</code> - 列出所有设备</li>
-                    <li><code>POST /devices/scan</code> - 扫描子网设备</li>
-                    <li><code>POST /experiments/</code> - 调度新实验</li>
-                    <li><code>GET /experiments/</code> - 列出所有实验</li>
-                    <li><code>GET /captures/</code> - 列出PCAP记录</li>
-                    <li><code>POST /shell-scripts/upload</code> - 上传Shell脚本</li>
-                    <li><code>POST /shell-scripts/{id}/execute</code> - 执行脚本</li>
-                    <li><code>WS /api/ws/execution/{id}</code> - 实时执行监控</li>
+                    <li><code>GET /devices/</code> - List all devices</li>
+                    <li><code>POST /devices/scan</code> - Scan subnet devices</li>
+                    <li><code>POST /experiments/</code> - Schedule new experiment</li>
+                    <li><code>GET /experiments/</code> - List all experiments</li>
+                    <li><code>GET /captures/</code> - List PCAP records</li>
+                    <li><code>POST /shell-scripts/upload</code> - Upload shell script</li>
+                    <li><code>POST /shell-scripts/{id}/execute</code> - Execute script</li>
+                    <li><code>WS /api/ws/execution/{id}</code> - Real-time execution monitoring</li>
                 </ul>
             </div>
         </div>
