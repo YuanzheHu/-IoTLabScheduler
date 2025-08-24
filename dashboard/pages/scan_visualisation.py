@@ -378,10 +378,12 @@ def create_ip_vs_ports_chart(data: List[Dict]):
     if not data:
         return None
     
-    # Prepare data for the chart - include all online devices
+    # Prepare data for the chart - only include devices with port scan data
     chart_data = []
+    devices_with_ports = []
+    
     for device in data:
-        # Include all online devices with IP addresses
+        # Only include online devices with IP addresses that have port scan data
         if (device.get('status') == 'online' and 
             device.get('ip_address') and 
             device.get('ip_address') not in ['', 'Unknown', 'None']):
@@ -391,8 +393,16 @@ def create_ip_vs_ports_chart(data: List[Dict]):
             vendor = device.get('vendor', 'Unknown')
             ports = device.get('ports', [])
             
-            if ports:
-                # Device has port scan data - count ports by status
+            # Only include devices that have actual port scan data
+            if ports and len(ports) > 0:
+                devices_with_ports.append({
+                    'ip_address': ip_address,
+                    'device_name': device_name,
+                    'vendor': vendor,
+                    'total_ports': len(ports)
+                })
+                
+                # Count ports by status
                 port_status_counts = {}
                 for port in ports:
                     status = port.get('state', 'unknown')
@@ -410,28 +420,20 @@ def create_ip_vs_ports_chart(data: List[Dict]):
                         'Vendor': vendor,
                         'Total Ports': len(ports)
                     })
-            else:
-                # Device has no port scan data - show as "No Scan Data"
-                chart_data.append({
-                    'IP Address': ip_address,
-                    'Device Name': device_name,
-                    'Port Count': 0,
-                    'Port Status': 'No Scan Data',
-                    'Vendor': vendor,
-                    'Total Ports': 0
-                })
     
     if not chart_data:
         return None
     
     df = pd.DataFrame(chart_data)
     
-    # Calculate total ports per device for sorting
-    device_totals = df.groupby('IP Address')['Total Ports'].first().reset_index()
-    device_totals = device_totals.sort_values('Total Ports', ascending=False)
+    # Sort devices by total ports (descending) - only devices with ports
+    devices_with_ports.sort(key=lambda x: x['total_ports'], reverse=True)
+    
+    # Create ordered categories for IP addresses based on total ports
+    ip_order = [device['ip_address'] for device in devices_with_ports]
     
     # Sort by total ports (descending), then by port status
-    df['IP Address'] = pd.Categorical(df['IP Address'], categories=device_totals['IP Address'], ordered=True)
+    df['IP Address'] = pd.Categorical(df['IP Address'], categories=ip_order, ordered=True)
     df = df.sort_values(['IP Address', 'Port Status'])
     
     # Create stacked bar chart
@@ -440,6 +442,7 @@ def create_ip_vs_ports_chart(data: List[Dict]):
         x='IP Address',
         y='Port Count',
         color='Port Status',
+        title="Online Devices IP Address vs Port Status Distribution Analysis",
         labels={'Port Count': 'Port Count', 'IP Address': 'Device IP Address', 'Port Status': 'Port Status'},
         hover_data=['Device Name', 'Total Ports', 'Vendor'],
         color_discrete_map={
@@ -448,7 +451,6 @@ def create_ip_vs_ports_chart(data: List[Dict]):
             'Filtered': '#ffa500',  # Orange - Filtered ports
             'Open|Filtered': '#ffff00',  # Yellow - Open or filtered ports
             'Unknown': '#808080',   # Gray - Unknown status
-            'No Scan Data': '#c0c0c0'  # Light gray - No scan data
         }
     )
     
@@ -682,11 +684,12 @@ def create_service_analysis_charts(data: List[Dict]):
 def create_os_analysis_charts(data: List[Dict]):
     """Create comprehensive OS analysis visualizations"""
     if not data:
-        return None, None, None
+        return None, None, None, None
     
     # OS Detection Analysis
     os_patterns = {}
     vendor_os_mapping = {}
+    vendor_counts = {}
     os_detection_stats = {
         'Detected': 0,
         'Not Detected': 0,
@@ -697,6 +700,13 @@ def create_os_analysis_charts(data: List[Dict]):
         os_guesses = device.get('os_guesses', [])
         os_details = device.get('os_details', {})
         vendor = device.get('vendor', 'Unknown')
+        
+        # Count vendors (for all devices, regardless of OS detection)
+        # Skip 'Unknown' vendors
+        if vendor and vendor != 'Unknown' and vendor != '':
+            if vendor not in vendor_counts:
+                vendor_counts[vendor] = 0
+            vendor_counts[vendor] += 1
         
         if os_guesses and len(os_guesses) > 0:
             if len(os_guesses) > 1:
@@ -745,10 +755,13 @@ def create_os_analysis_charts(data: List[Dict]):
         # Truncate long OS names for display
         pattern_names = []
         for pattern, _ in top_patterns:
-            if len(pattern) > 40:
-                pattern_names.append(pattern[:40] + "...")
+            # Handle None or empty OS names
+            if pattern is None or pattern == '':
+                pattern_names.append("Unknown")
+            elif len(str(pattern)) > 40:
+                pattern_names.append(str(pattern)[:40] + "...")
             else:
-                pattern_names.append(pattern)
+                pattern_names.append(str(pattern))
         
         fig2 = px.bar(
             x=[p[1] for p in top_patterns],
@@ -758,52 +771,87 @@ def create_os_analysis_charts(data: List[Dict]):
             labels={'x': 'Device Count', 'y': 'Operating System'},
             color_discrete_sequence=['#3498db']
         )
-        fig2.update_layout(height=500, title_x=0.5)
+        fig2.update_layout(height=400, title_x=0.5)
+    else:
+        fig2 = None
+    
+    # Create top 15 vendors bar chart
+    if vendor_counts:
+        # Get top 15 vendors by device count
+        top_vendors = sorted(vendor_counts.items(), key=lambda x: x[1], reverse=True)[:15]
         
-        # Create vendor-OS heatmap
-        vendor_os_data = []
-        for vendor, os_dict in vendor_os_mapping.items():
+        # Truncate long vendor names for display (similar to OS patterns)
+        vendor_names = []
+        for vendor, _ in top_vendors:
+            # Handle None or empty vendor names
+            if vendor is None or vendor == '':
+                vendor_names.append("Unknown")
+            elif len(str(vendor)) > 40:
+                vendor_names.append(str(vendor)[:40] + "...")
+            else:
+                vendor_names.append(str(vendor))
+        
+        fig3 = px.bar(
+            x=[v[1] for v in top_vendors],
+            y=vendor_names,
+            orientation='h',
+            title="Top 15 Vendors by Device Count",
+            labels={'x': 'Device Count', 'y': 'Vendor'},
+            color_discrete_sequence=['#3498db']  # Same color as OS patterns
+        )
+        fig3.update_layout(height=400, title_x=0.5)  # Same height as OS patterns
+    else:
+        fig3 = None
+    
+    # Create vendor-OS heatmap
+    vendor_os_data = []
+    for vendor, os_dict in vendor_os_mapping.items():
+        # Skip 'Unknown' vendors in heatmap
+        if vendor and vendor != 'Unknown' and vendor != '':
             for os_info, count in os_dict.items():
+                # Handle None or empty OS values
+                safe_os_info = "Unknown" if os_info is None or os_info == '' else str(os_info)
+                
                 vendor_os_data.append({
-                    'Vendor': vendor,
-                    'OS': os_info[:30] + "..." if len(os_info) > 30 else os_info,
+                    'Vendor': str(vendor),
+                    'OS': safe_os_info[:30] + "..." if len(safe_os_info) > 30 else safe_os_info,
                     'Count': count
                 })
-        
-        if vendor_os_data:
-            df_heatmap = pd.DataFrame(vendor_os_data)
-            # Pivot for heatmap
-            pivot_df = df_heatmap.pivot_table(
-                index='Vendor', 
-                columns='OS', 
-                values='Count', 
-                fill_value=0
-            )
-            
-            # Limit to top vendors and OS
-            top_vendors = pivot_df.sum(axis=1).nlargest(10).index
-            top_os = pivot_df.sum(axis=0).nlargest(10).index
-            pivot_df = pivot_df.loc[top_vendors, top_os]
-            
-            fig3 = px.imshow(
-                pivot_df,
-                labels=dict(x="Operating System", y="Vendor", color="Device Count"),
-                title="Vendor vs Operating System Heatmap",
-                color_continuous_scale="Blues"
-            )
-            fig3.update_layout(
-                height=600, 
-                title_x=0.5,
-                xaxis=dict(tickangle=45, tickfont=dict(size=12)),
-                yaxis=dict(tickfont=dict(size=12)),
-                font=dict(size=12)
-            )
-        else:
-            fig3 = None
-        
-        return fig1, fig2, fig3
     
-    return fig1, None, None
+    if vendor_os_data:
+        df_heatmap = pd.DataFrame(vendor_os_data)
+        # Pivot for heatmap
+        pivot_df = df_heatmap.pivot_table(
+            index='Vendor', 
+            columns='OS', 
+            values='Count', 
+            fill_value=0
+        )
+        
+        # Limit to top vendors and OS
+        top_vendors = pivot_df.sum(axis=1).nlargest(10).index
+        top_os = pivot_df.sum(axis=0).nlargest(10).index
+        pivot_df = pivot_df.loc[top_vendors, top_os]
+        
+        fig4 = px.imshow(
+            pivot_df,
+            labels=dict(x="Operating System", y="Vendor", color="Device Count"),
+            title="Vendor vs Operating System Heatmap",
+            color_continuous_scale="Blues"
+        )
+        fig4.update_layout(
+            height=600, 
+            title_x=0.5,
+            xaxis=dict(tickangle=45, tickfont=dict(size=12)),
+            yaxis=dict(tickfont=dict(size=12)),
+            font=dict(size=12)
+        )
+    else:
+        fig4 = None
+    
+    return fig1, fig2, fig3, fig4
+    
+    return fig1, None, None, None
 
 def create_port_distribution_analysis(data: List[Dict]):
     """Create port distribution analysis focused on protocol types and port ranges"""
@@ -1027,6 +1075,8 @@ if not comprehensive_data:
     with tab4:
         st.info("**Operating System Analysis** - Shows OS detection results and patterns")
         st.markdown("- OS detection success rates")
+        st.markdown("- Top 15 operating system patterns")
+        st.markdown("- Top 15 vendors by device count")
         st.markdown("- Vendor vs OS correlations")
         st.markdown("- Device fingerprinting results")
     
@@ -1139,9 +1189,8 @@ with tab2:
     - 🟠 **Orange (Filtered)**: Filtered ports - Blocked by firewall
     - 🟠 **Dark Orange (Open|Filtered)**: Open or filtered ports - Cannot determine exact status
     - ⚪ **Gray (Unknown)**: Unknown status - Port status cannot be determined
-    - ⚪ **Light Gray (No Scan Data)**: No port scan performed yet
     
-    **Showing all online devices** including those with no port scan data. Each device displays port status in stacked format.
+    **Showing only online devices with port scan data**. Devices are sorted by total ports scanned (highest to lowest). Each device displays port status in stacked format.
     """)
     
     # Create and display IP vs Ports chart
@@ -1152,35 +1201,37 @@ with tab2:
         # Add detailed table
         st.markdown("#### 📋 Device Port Summary Table")
         
-        # Create summary table for online devices
+        # Create summary table for online devices with port scan data
         table_data = []
         for device in comprehensive_data:
-            # Include all online devices with IP addresses (consistent with chart)
+            # Only include online devices with IP addresses that have port scan data
             if (device.get('status') == 'online' and 
                 device.get('ip_address') and 
                 device.get('ip_address') not in ['', 'Unknown', 'None']):
+                
                 # Get port details
                 ports = device.get('ports', [])
-                open_ports = [p for p in ports if p.get('state') == 'open']
-                closed_ports = [p for p in ports if p.get('state') == 'closed']
-                filtered_ports = [p for p in ports if p.get('state') == 'filtered']
-                open_filtered_ports = [p for p in ports if p.get('state') == 'open|filtered']
-                services = list(set([p.get('service', 'unknown') for p in open_ports]))
                 
-                # Format port numbers for display
-                def format_port_numbers(port_list):
-                    if not port_list:
-                        return 'None'
-                    port_nums = []
-                    for p in port_list:
-                        port_num = p.get('port', '')
-                        if '/' in str(port_num):
-                            port_num = str(port_num).split('/')[0]
-                        port_nums.append(str(port_num))
-                    return ', '.join(sorted(port_nums, key=lambda x: int(x) if x.isdigit() else 0))
-                
-                if ports:
-                    # Device has port scan data
+                # Only include devices with actual port scan data
+                if ports and len(ports) > 0:
+                    open_ports = [p for p in ports if p.get('state') == 'open']
+                    closed_ports = [p for p in ports if p.get('state') == 'closed']
+                    filtered_ports = [p for p in ports if p.get('state') == 'filtered']
+                    open_filtered_ports = [p for p in ports if p.get('state') == 'open|filtered']
+                    services = list(set([p.get('service', 'unknown') for p in open_ports]))
+                    
+                    # Format port numbers for display
+                    def format_port_numbers(port_list):
+                        if not port_list:
+                            return 'None'
+                        port_nums = []
+                        for p in port_list:
+                            port_num = p.get('port', '')
+                            if '/' in str(port_num):
+                                port_num = str(port_num).split('/')[0]
+                            port_nums.append(str(port_num))
+                        return ', '.join(sorted(port_nums, key=lambda x: int(x) if x.isdigit() else 0))
+                    
                     table_data.append({
                         'Device Name': device.get('hostname', 'Unknown'),
                         'IP Address': device['ip_address'],
@@ -1194,25 +1245,11 @@ with tab2:
                         'Vendor': device.get('vendor', 'Unknown'),
                         'Last Scan': device.get('port_scan_time', 'Never')[:19] if device.get('port_scan_time') else 'Never'
                     })
-                else:
-                    # Device has no port scan data
-                    table_data.append({
-                        'Device Name': device.get('hostname', 'Unknown'),
-                        'IP Address': device['ip_address'],
-                        '🟢 Open': 0,
-                        '🔴 Closed': 0,
-                        '🟠 Filtered': 0,
-                        '🟠 Open|Filtered': 0,
-                        'Open Port Numbers': 'None',
-                        'Total Scanned': 0,
-                        'Services': 'No scan data',
-                        'Vendor': device.get('vendor', 'Unknown'),
-                        'Last Scan': 'Never'
-                    })
         
         if table_data:
             df_table = pd.DataFrame(table_data)
-            df_table = df_table.sort_values('🟢 Open', ascending=False)
+            # Sort by total scanned ports (descending) to match chart order
+            df_table = df_table.sort_values('Total Scanned', ascending=False)
             st.dataframe(df_table, use_container_width=True)
             
             # Add port status summary statistics
@@ -1235,7 +1272,7 @@ with tab2:
                 total_ports = sum(len(d.get('ports', [])) for d in comprehensive_data)
                 st.metric("Total Ports Scanned", total_ports)
     else:
-        st.info("📊 No port scan data available for online devices. Please run port scans on online devices first.")
+        st.info("📊 No port scan data available for online devices. Please run port scans on online devices first to see the IP vs Ports analysis.")
 
 with tab3:
     st.markdown("### 🔧 Service Distribution Analysis")
@@ -1298,9 +1335,10 @@ with tab4:
     st.markdown("### 🖥️ Operating System Analysis")
     
     # Create OS analysis charts
-    os_pie, os_bar, os_heatmap = create_os_analysis_charts(comprehensive_data)
+    os_pie, os_bar, os_vendors, os_heatmap = create_os_analysis_charts(comprehensive_data)
     
     if os_pie:
+        # First row: OS Detection Success Rate and Top OS Patterns
         col1, col2 = st.columns(2)
         with col1:
             st.plotly_chart(os_pie, use_container_width=True)
@@ -1308,10 +1346,27 @@ with tab4:
             if os_bar:
                 st.plotly_chart(os_bar, use_container_width=True)
         
-        # Display heatmap in full width
-        if os_heatmap:
+        # Second row: Top 15 Vendors and Vendor-OS Heatmap (side by side)
+        if os_vendors and os_heatmap:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### 🏭 Top 15 Vendors by Device Count")
+                st.plotly_chart(os_vendors, use_container_width=True)
+                st.markdown("*Shows the distribution of devices across identified vendors (Unknown vendors excluded)*")
+            with col2:
+                st.markdown("#### 🔥 Vendor vs Operating System Heatmap")
+                st.plotly_chart(os_heatmap, use_container_width=True)
+                st.markdown("*Correlation between device vendors and detected operating systems*")
+        elif os_vendors:
+            # Only vendors chart available
+            st.markdown("#### 🏭 Top 15 Vendors by Device Count")
+            st.plotly_chart(os_vendors, use_container_width=True)
+            st.markdown("*Shows the distribution of devices across identified vendors (Unknown vendors excluded)*")
+        elif os_heatmap:
+            # Only heatmap available
             st.markdown("#### 🔥 Vendor vs Operating System Heatmap")
             st.plotly_chart(os_heatmap, use_container_width=True)
+            st.markdown("*Correlation between device vendors and detected operating systems*")
         
         # Add OS details table
         st.markdown("#### 📋 OS Detection Details")
@@ -1338,7 +1393,7 @@ with tab4:
             df_os = pd.DataFrame(os_table)
             st.dataframe(df_os, use_container_width=True)
     else:
-        st.info("No OS detection data available for visualization")
+        st.info("No OS detection data available for visualization. Run OS scans on devices to see vendor distribution and OS patterns.")
 
 with tab5:
     st.markdown("### 📈 Port Distribution Analysis")

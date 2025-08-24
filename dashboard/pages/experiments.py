@@ -473,35 +473,7 @@ if experiments:
                 
                 with col2:
                     if st.button("📋 Details", key=f"details_{exp_id}", use_container_width=True, help="View experiment details"):
-                        # Curated configuration summary
-                        mode = exp.get('attack_mode', 'single')
-                        atype = exp.get('attack_type', 'N/A')
-                        iface = exp.get('interface', 'N/A')
-                        duration = exp.get('duration_sec', 'N/A')
-                        port = exp.get('port', None)
-                        cycles_val = exp.get('cycles', None)
-                        settle_val = exp.get('settle_time_sec', None)
-
-                        # Build lines conditionally
-                        lines = []
-                        lines.append(f"- Attack Type: `{atype}`")
-                        lines.append(f"- Attack Mode: `{mode}`")
-                        lines.append(f"- Interface: `{iface}`")
-                        if atype != 'icmp_flood' and port:
-                            lines.append(f"- Port: `{port}`")
-                        lines.append(f"- Duration (sec): `{duration}`")
-                        if mode == 'cyclic':
-                            if cycles_val is not None:
-                                lines.append(f"- Cycles: `{cycles_val}`")
-                            if settle_val is not None:
-                                lines.append(f"- Settle Time (sec): `{settle_val}`")
-                        # Optional time fields
-                        if start_time and start_time != 'N/A':
-                            lines.append(f"- Start Time: `{start_time}`")
-                        if end_time and end_time != 'N/A':
-                            lines.append(f"- End Time: `{end_time}`")
-
-                        st.markdown("\n".join(lines))
+                        st.json(exp)
                 
                 with col3:
                     # PCAP download button

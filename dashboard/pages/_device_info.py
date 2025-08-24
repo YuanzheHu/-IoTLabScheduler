@@ -977,50 +977,25 @@ with st.expander("⚡ Actions", expanded=True):
                         start_time = datetime.datetime.fromisoformat(exp['start_time'])
                         st.metric("Start Time", start_time.strftime('%H:%M:%S'))
 
-                    # Configuration summary block
-                    st.markdown("#### Configuration")
-                    cfg_lines = []
-                    atype = exp.get('attack_type') or 'N/A'
-                    mode = exp.get('attack_mode') or 'single'
-                    iface = exp.get('interface') or 'N/A'
-                    duration = exp.get('duration_sec')
-                    port = exp.get('port')
-                    cycles_val = exp.get('cycles')
-                    settle_val = exp.get('settle_time_sec')
+                        # Add refresh button to check current status
+                        if st.button(f"🔄 Refresh Status", key=f"refresh_exp_{exp['id']}"):
+                            try:
+                                status_resp = requests.get(f"{EXPERIMENTS_URL}/{exp['id']}/status/v2", timeout=10)
+                                if status_resp.status_code == 200:
+                                    status_data = status_resp.json()
+                                    st.success(f"✅ Status: {status_data.get('status', 'Unknown')}")
+                                    st.info(f"📈 Progress: {status_data.get('progress', 'N/A')}")
 
-                    cfg_lines.append(f"- Attack Type: `{atype}`")
-                    cfg_lines.append(f"- Attack Mode: `{mode}`")
-                    cfg_lines.append(f"- Interface: `{iface}`")
-                    if atype != 'icmp_flood' and port:
-                        cfg_lines.append(f"- Port: `{port}`")
-                    if duration is not None:
-                        cfg_lines.append(f"- Duration (sec): `{duration}`")
-                    if mode == 'cyclic':
-                        if cycles_val is not None:
-                            cfg_lines.append(f"- Cycles: `{cycles_val}`")
-                        if settle_val is not None:
-                            cfg_lines.append(f"- Settle Time (sec): `{settle_val}`")
-                    st.markdown("\n".join(cfg_lines))
-
-                    # Add refresh button to check current status
-                    if st.button(f"🔄 Refresh Status", key=f"refresh_exp_{exp['id']}"):
-                        try:
-                            status_resp = requests.get(f"{EXPERIMENTS_URL}/{exp['id']}/status/v2", timeout=10)
-                            if status_resp.status_code == 200:
-                                status_data = status_resp.json()
-                                st.success(f"✅ Status: {status_data.get('status', 'Unknown')}")
-                                st.info(f"📈 Progress: {status_data.get('progress', 'N/A')}")
-
-                                # Update session state with latest info
-                                exp.update({
-                                    "status": status_data.get('status'),
-                                    "current_cycle": status_data.get('current_cycle'),
-                                    "progress": status_data.get('progress')
-                                })
-                            else:
-                                st.error(f"❌ Failed to fetch status: {status_resp.text}")
-                        except Exception as e:
-                            st.error(f"❌ Error fetching status: {e}")
+                                    # Update session state with latest info
+                                    exp.update({
+                                        "status": status_data.get('status'),
+                                        "current_cycle": status_data.get('current_cycle'),
+                                        "progress": status_data.get('progress')
+                                    })
+                                else:
+                                    st.error(f"❌ Failed to fetch status: {status_resp.text}")
+                            except Exception as e:
+                                st.error(f"❌ Error fetching status: {e}")
 
         # DoS Attack Experiment Form V2
         if st.session_state.get("show_dos_form", False):

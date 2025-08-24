@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 from celery import Celery
 from db.base import SessionLocal
-from db.models import Experiment
+from db.models import Experiment, Device
 from core.attack_engine import AttackEngine
 from core.attack_engine_v2 import CyclicAttackEngine, AttackConfig, AttackType, AttackMode
 import asyncio
@@ -13,6 +13,7 @@ from core.traffic_capture import TcpdumpUtil
 from db.models import Capture
 from typing import Dict, Any
 from db.models import ScriptExecution
+from config import get_pcap_dir
 import tempfile
 import subprocess
 import os
@@ -149,12 +150,21 @@ def run_attack_experiment(experiment_id, attack_type, target_ip, port, duration,
         db.commit()
 
         # Step 2.5: Start packet capture
-        # Archive PCAPs by target_ip
-        safe_ip = target_ip.replace(':', '_').replace('.', '_')
-        pcap_dir = os.path.join("data/pcaps", safe_ip)
-        os.makedirs(pcap_dir, exist_ok=True)
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-        pcap_filename = f"exp_{experiment_id}_{safe_ip}_{timestamp}.pcap"
+        # Archive PCAPs by MAC address instead of IP
+        # Get MAC address for the target IP
+        device = db.query(Device).filter(Device.ip_address == target_ip).first()
+        if device and device.mac_address:
+            mac_address = device.mac_address
+        else:
+            # Fallback to IP if MAC not found
+            mac_address = target_ip
+        
+        # Create directory structure using config
+        pcap_dir = get_pcap_dir(target_ip, mac_address)
+        
+        # Format timestamp as DD-MM-YY-HH-MM-SS
+        timestamp = datetime.utcnow().strftime("%d-%m-%y-%H-%M-%S")
+        pcap_filename = f"{mac_address}_{timestamp}_UTC.pcap"
         pcap_path = os.path.join(pcap_dir, pcap_filename)
         tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface, target_ip=target_ip)
         tcpdump.start()
@@ -228,11 +238,21 @@ def run_traffic_capture(experiment_id, target_ip, duration, interface="eth0"):
         db.refresh(exp)
 
         # Start packet capture
-        safe_ip = target_ip.replace(':', '_').replace('.', '_')
-        pcap_dir = os.path.join("data/pcaps", safe_ip)
-        os.makedirs(pcap_dir, exist_ok=True)
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-        pcap_filename = f"capture_{experiment_id}_{safe_ip}_{timestamp}.pcap"
+        # Archive PCAPs by MAC address instead of IP
+        # Get MAC address for the target IP
+        device = db.query(Device).filter(Device.ip_address == target_ip).first()
+        if device and device.mac_address:
+            mac_address = device.mac_address
+        else:
+            # Fallback to IP if MAC not found
+            mac_address = target_ip
+        
+        # Create directory structure using config
+        pcap_dir = get_pcap_dir(target_ip, mac_address)
+        
+        # Format timestamp as DD-MM-YY-HH-MM-SS
+        timestamp = datetime.utcnow().strftime("%d-%m-%y-%H-%M-%S")
+        pcap_filename = f"{mac_address}_{timestamp}_UTC.pcap"
         pcap_path = os.path.join(pcap_dir, pcap_filename)
         tcpdump = TcpdumpUtil(output_file=pcap_path, interface=interface, target_ip=target_ip)
         tcpdump.start()
@@ -306,11 +326,21 @@ def run_cyclic_attack_experiment(experiment_id, attack_config_dict):
         )
 
         # 4. 设置流量捕获
-        safe_ip = config.target_ip.replace(':', '_').replace('.', '_')
-        pcap_dir = os.path.join("data/pcaps", safe_ip)
-        os.makedirs(pcap_dir, exist_ok=True)
-        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-        pcap_filename = f"exp_{experiment_id}_{safe_ip}_{timestamp}.pcap"
+        # Archive PCAPs by MAC address instead of IP
+        # Get MAC address for the target IP
+        device = db.query(Device).filter(Device.ip_address == config.target_ip).first()
+        if device and device.mac_address:
+            mac_address = device.mac_address
+        else:
+            # Fallback to IP if MAC not found
+            mac_address = config.target_ip
+        
+        # Create directory structure using config
+        pcap_dir = get_pcap_dir(config.target_ip, mac_address)
+        
+        # Format timestamp as DD-MM-YY-HH-MM-SS
+        timestamp = datetime.utcnow().strftime("%d-%m-%y-%H-%M-%S")
+        pcap_filename = f"{mac_address}_{timestamp}_UTC.pcap"
         pcap_path = os.path.join(pcap_dir, pcap_filename)
         tcpdump = TcpdumpUtil(output_file=pcap_path, interface=config.interface, target_ip=config.target_ip)
         tcpdump.start()
