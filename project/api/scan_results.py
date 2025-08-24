@@ -20,12 +20,12 @@ def get_db():
 def create_scan_result_internal(scan_result: ScanResultCreate, db: Session):
     """Internal function to create a scan result."""
     try:
-        # 验证设备是否存在
+        # Check if the device exists
         device = db.query(Device).filter(Device.id == scan_result.device_id).first()
         if not device:
             raise HTTPException(status_code=404, detail="Device not found")
         
-        # 创建扫描结果
+        # Create the scan result
         db_scan_result = ScanResult(
             device_id=scan_result.device_id,
             scan_type=scan_result.scan_type,
@@ -51,18 +51,18 @@ def create_scan_result_internal(scan_result: ScanResultCreate, db: Session):
 
 def update_or_create_scan_result(scan_result: ScanResultCreate, db: Session):
     """
-    Update existing scan result for a device or create new one if none exists.
+    Update an existing scan result for a device or create a new one if none exists.
     This ensures one device has only one scan result per scan type.
     """
     try:
-        # 查找该设备是否已有相同类型的扫描结果
+        # Check if there is already a scan result of the same type for this device
         existing_result = db.query(ScanResult).filter(
             ScanResult.device_id == scan_result.device_id,
             ScanResult.scan_type == scan_result.scan_type
         ).first()
         
         if existing_result:
-            # 更新现有记录
+            # Update the existing record
             existing_result.target_ip = scan_result.target_ip
             existing_result.scan_duration = scan_result.scan_duration
             existing_result.ports = scan_result.ports
@@ -72,13 +72,13 @@ def update_or_create_scan_result(scan_result: ScanResultCreate, db: Session):
             existing_result.command = scan_result.command
             existing_result.error = scan_result.error
             existing_result.status = scan_result.status
-            existing_result.scan_time = datetime.datetime.utcnow()  # 更新时间戳
+            existing_result.scan_time = datetime.datetime.utcnow()  # Update timestamp
             
             db.commit()
             db.refresh(existing_result)
             return existing_result
         else:
-            # 创建新记录
+            # Create a new record
             return create_scan_result_internal(scan_result, db)
             
     except Exception as e:
@@ -103,7 +103,7 @@ def get_scan_results(
     try:
         query = db.query(ScanResult)
         
-        # 应用过滤器
+        # Apply filters
         if device_id:
             query = query.filter(ScanResult.device_id == device_id)
         if scan_type:
@@ -111,13 +111,13 @@ def get_scan_results(
         if target_ip:
             query = query.filter(ScanResult.target_ip == target_ip)
         
-        # 按时间倒序排列
+        # Order by time descending
         query = query.order_by(ScanResult.scan_time.desc())
         
-        # 应用分页
+        # Apply pagination
         results = query.offset(offset).limit(limit).all()
         
-        # 手动构建响应，处理JSON字段
+        # Manually build the response, handle JSON fields
         response_results = []
         for result in results:
             response_results.append({
@@ -163,7 +163,7 @@ def get_device_scan_results(
 ):
     """Get all scan results for a specific device."""
     try:
-        # 验证设备是否存在
+        # Check if the device exists
         device = db.query(Device).filter(Device.id == device_id).first()
         if not device:
             raise HTTPException(status_code=404, detail="Device not found")
@@ -173,10 +173,10 @@ def get_device_scan_results(
         if scan_type:
             query = query.filter(ScanResult.scan_type == scan_type)
         
-        # 按时间倒序排列
+        # Order by time descending
         results = query.order_by(ScanResult.scan_time.desc()).limit(limit).all()
         
-        # 手动构建响应，处理JSON字段
+        # Manually build the response, handle JSON fields
         response_results = []
         for result in results:
             response_results.append({
@@ -240,7 +240,7 @@ def cleanup_duplicate_scan_results(db: Session = Depends(get_db)):
     This ensures one device has only one scan result per scan type.
     """
     try:
-        # 查找所有重复的扫描结果
+        # Find all duplicate scan results
         duplicates = db.execute("""
             WITH ranked_results AS (
                 SELECT 
@@ -259,7 +259,7 @@ def cleanup_duplicate_scan_results(db: Session = Depends(get_db)):
         if not duplicates:
             return {"message": "No duplicate scan results found", "deleted_count": 0}
         
-        # 删除重复的记录
+        # Delete duplicate records
         duplicate_ids = [row[0] for row in duplicates]
         deleted_count = db.query(ScanResult).filter(ScanResult.id.in_(duplicate_ids)).delete()
         db.commit()
@@ -278,10 +278,10 @@ def cleanup_duplicate_scan_results(db: Session = Depends(get_db)):
 def get_scan_results_summary(db: Session = Depends(get_db)):
     """Get summary statistics of scan results."""
     try:
-        # 总扫描结果数
+        # Total number of scan results
         total_results = db.query(ScanResult).count()
         
-        # 按扫描类型统计
+        # Statistics by scan type
         type_stats = db.execute(text("""
             SELECT 
                 scan_type,
@@ -291,7 +291,7 @@ def get_scan_results_summary(db: Session = Depends(get_db)):
             GROUP BY scan_type
         """)).fetchall()
         
-        # 按设备统计
+        # Statistics by device
         device_stats = db.execute(text("""
             SELECT 
                 device_id,

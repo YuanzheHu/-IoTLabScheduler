@@ -4,13 +4,13 @@ import logging
 import sys
 import os
 
-# 添加项目根目录到Python路径
+# Add the project root directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from main import app
 except ImportError:
-    # 如果无法导入main，创建一个空的app对象
+    # If main cannot be imported, create an empty app object
     app = None
 
 

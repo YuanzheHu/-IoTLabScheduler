@@ -66,127 +66,127 @@ class TcpdumpUtil:
         # Add extra arguments
         cmd.extend(self.extra_args)
         
-        # 添加详细的错误处理和日志
-        print(f"启动tcpdump命令: {' '.join(cmd)}")
+        # Add detailed error handling and logging
+        print(f"Starting tcpdump command: {' '.join(cmd)}")
         
-        # 确保输出目录存在
+        # Ensure output directory exists
         os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
         
-        # 检查tcpdump命令是否可用
+        # Check if tcpdump command is available
         try:
             result = subprocess.run(['which', 'tcpdump'], check=True, capture_output=True, text=True)
-            print(f"tcpdump路径: {result.stdout.strip()}")
+            print(f"tcpdump path: {result.stdout.strip()}")
         except subprocess.CalledProcessError:
-            raise RuntimeError("tcpdump命令不可用")
+            raise RuntimeError("tcpdump command is not available")
         
-        # 检查网络接口
+        # Check network interface
         try:
-            # 列出所有网络接口
+            # List all network interfaces
             result = subprocess.run(['ip', 'link', 'show'], check=True, capture_output=True, text=True)
-            print(f"可用网络接口:\n{result.stdout}")
+            print(f"Available network interfaces:\n{result.stdout}")
             
-            # 获取指定接口的IP地址
+            # Get IP address info for the specified interface
             result = subprocess.run(['ip', 'addr', 'show', self.interface], check=True, capture_output=True, text=True)
-            print(f"{self.interface}接口信息:\n{result.stdout}")
+            print(f"Interface {self.interface} info:\n{result.stdout}")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"网络接口检查失败: {e}")
+            raise RuntimeError(f"Network interface check failed: {e}")
         
-        # 测试tcpdump是否可以在指定接口上工作
+        # Test if tcpdump can work on the specified interface
         try:
             test_cmd = ['tcpdump', '-i', self.interface, '-c', '1', '-n']
-            print(f"测试tcpdump命令: {' '.join(test_cmd)}")
+            print(f"Testing tcpdump command: {' '.join(test_cmd)}")
             result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=3)
-            print(f"tcpdump测试结果:\n{result.stdout}\n{result.stderr}")
+            print(f"tcpdump test result:\n{result.stdout}\n{result.stderr}")
         except subprocess.TimeoutExpired:
-            print("tcpdump测试超时，但这是正常的")
+            print("tcpdump test timed out, but this is normal")
         except Exception as e:
-            raise RuntimeError(f"tcpdump测试失败: {e}")
+            raise RuntimeError(f"tcpdump test failed: {e}")
         
-        # 启动tcpdump进程
+        # Start tcpdump process
         try:
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 preexec_fn=os.setsid,
-                text=True  # 使用文本模式
+                text=True  # Use text mode
             )
-            print(f"tcpdump进程已启动 (PID: {self.process.pid})")
+            print(f"tcpdump process started (PID: {self.process.pid})")
         except Exception as e:
-            raise RuntimeError(f"启动tcpdump进程失败: {e}")
+            raise RuntimeError(f"Failed to start tcpdump process: {e}")
         
-        # 等待一下确保进程启动
+        # Wait a bit to ensure the process starts
         time.sleep(1)
         
-        # 检查进程是否正常启动
+        # Check if the process started successfully
         if self.process.poll() is not None:
-            stderr_output = self.process.stderr.read() if self.process.stderr else "无错误输出"
-            raise RuntimeError(f"tcpdump进程启动失败: {stderr_output}")
+            stderr_output = self.process.stderr.read() if self.process.stderr else "No error output"
+            raise RuntimeError(f"tcpdump process failed to start: {stderr_output}")
         
-        # 检查输出文件是否创建
+        # Check if output file was created
         if not os.path.exists(self.output_file):
-            raise RuntimeError(f"tcpdump输出文件未创建: {self.output_file}")
+            raise RuntimeError(f"tcpdump output file was not created: {self.output_file}")
         
-        print(f"tcpdump已成功启动，输出文件: {self.output_file}")
+        print(f"tcpdump started successfully, output file: {self.output_file}")
 
     def stop(self):
         """Stop the tcpdump process."""
         if self.process is None:
             raise RuntimeError('tcpdump is not running')
         
-        print(f"停止tcpdump进程 (PID: {self.process.pid})")
+        print(f"Stopping tcpdump process (PID: {self.process.pid})")
         
         try:
-            # 检查进程是否还在运行
+            # Check if the process is still running
             if self.process.poll() is not None:
-                print(f"tcpdump进程已经停止，返回码: {self.process.returncode}")
+                print(f"tcpdump process has already stopped, return code: {self.process.returncode}")
                 stdout = self.process.stdout.read() if self.process.stdout else ""
                 stderr = self.process.stderr.read() if self.process.stderr else ""
                 if stdout:
-                    print(f"进程输出:\n{stdout}")
+                    print(f"Process output:\n{stdout}")
                 if stderr:
-                    print(f"进程错误:\n{stderr}")
+                    print(f"Process error:\n{stderr}")
                 return
             
-            # 先尝试优雅停止
-            print("发送SIGTERM信号")
+            # Try to gracefully terminate first
+            print("Sending SIGTERM signal")
             os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
             
-            # 等待最多5秒
+            # Wait up to 5 seconds
             for i in range(10):
                 if self.process.poll() is not None:
-                    print(f"进程已停止，返回码: {self.process.returncode}")
+                    print(f"Process stopped, return code: {self.process.returncode}")
                     break
-                print(f"等待进程停止... ({i+1}/10)")
+                print(f"Waiting for process to stop... ({i+1}/10)")
                 time.sleep(0.5)
             
-            # 如果还没停止，强制终止
+            # If still not stopped, force kill
             if self.process.poll() is None:
-                print("发送SIGKILL信号")
+                print("Sending SIGKILL signal")
                 os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
                 self.process.wait()
-                print(f"进程已被强制终止，返回码: {self.process.returncode}")
+                print(f"Process was forcefully killed, return code: {self.process.returncode}")
             
-            # 读取进程输出
+            # Read process output
             stdout = self.process.stdout.read() if self.process.stdout else ""
             stderr = self.process.stderr.read() if self.process.stderr else ""
             if stdout:
-                print(f"进程输出:\n{stdout}")
+                print(f"Process output:\n{stdout}")
             if stderr:
-                print(f"进程错误:\n{stderr}")
+                print(f"Process error:\n{stderr}")
             
-            # 检查输出文件
+            # Check output file
             if os.path.exists(self.output_file):
                 file_size = os.path.getsize(self.output_file)
-                print(f"PCAP文件大小: {file_size} bytes")
+                print(f"PCAP file size: {file_size} bytes")
                 if file_size == 0:
-                    print("警告: PCAP文件为空")
+                    print("Warning: PCAP file is empty")
             else:
-                print(f"警告: PCAP文件不存在: {self.output_file}")
+                print(f"Warning: PCAP file does not exist: {self.output_file}")
             
-            print("tcpdump进程已停止")
+            print("tcpdump process has stopped")
         except Exception as e:
-            print(f"停止tcpdump进程时出错: {e}")
+            print(f"Error while stopping tcpdump process: {e}")
         finally:
             self.process = None
 

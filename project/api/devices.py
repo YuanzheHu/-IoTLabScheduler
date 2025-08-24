@@ -34,7 +34,8 @@ class ScanRequest(BaseModel):
 
 @router.post("/scan", response_model=List[Dict[str, Any]])
 def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
-    """Scans a subnet for devices and returns device information (online and offline).
+    """
+    Scan a subnet for devices and return device information (both online and offline).
 
     Args:
         request (ScanRequest): Request body containing subnet.
@@ -150,7 +151,8 @@ def scan_subnet(request: ScanRequest, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[Dict[str, Any]])
 def get_devices(db: Session = Depends(get_db)):
-    """Get all devices from database.
+    """
+    Get all devices from the database.
 
     Returns:
         List[Dict[str, str]]: List of devices with MAC, Name, IP, Status.
@@ -182,7 +184,7 @@ def get_device_by_mac(mac_address: str, db: Session = Depends(get_db)):
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
     
-    # 手动构建返回字典，确保Pydantic可以正确序列化
+    # Manually construct the return dictionary to ensure Pydantic can serialize it correctly
     return {
         "id": device.id,
         "ip_address": device.ip_address,
@@ -200,27 +202,34 @@ def get_device_by_mac(mac_address: str, db: Session = Depends(get_db)):
     }
 
 @router.get("/{ip}/portscan")
-async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, save_to_db: bool = True, db: Session = Depends(get_db)):
-    """执行端口扫描
-    
+async def port_scan_device(
+    ip: str,
+    ports: str = None,
+    fast_scan: bool = True,
+    save_to_db: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Perform a port scan on the target device.
+
     Args:
-        ip: 目标IP地址
-        ports: 要扫描的端口（可选，默认扫描常用端口）
-        fast_scan: 是否使用快速扫描模式
-        save_to_db: 是否保存结果到数据库
-        db: 数据库会话
-        
+        ip: Target IP address.
+        ports: Ports to scan (optional, defaults to common ports).
+        fast_scan: Whether to use fast scan mode.
+        save_to_db: Whether to save the result to the database.
+        db: Database session.
+
     Returns:
-        Dict: 扫描结果
+        Dict: Scan result.
     """
     try:
-        # 验证IP地址格式
+        # Validate IP address format
         ipaddress.ip_address(ip)
         
-        # 查找对应的设备
+        # Find the corresponding device
         device = db.query(Device).filter(Device.ip_address == ip).first()
         
-        # 如果设备不存在，创建一个临时设备记录
+        # If the device does not exist, create a temporary device record
         if not device:
             device = Device(
                 ip_address=ip,
@@ -234,10 +243,10 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
         
         device_id = device.id if device else None
         
-        # 创建扫描引擎
+        # Create scan engine
         scan_engine = ScanEngine()
         
-        # 执行端口扫描
+        # Perform port scan
         result = await scan_engine.scan_single_device(
             target_ip=ip,
             device_name=f"Device {ip}",
@@ -249,7 +258,7 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
         if result.error:
             raise HTTPException(status_code=500, detail=f"Port scan failed: {result.error}")
         
-        # 准备返回结果
+        # Prepare return result
         scan_result = {
             "ports": result.tcp_ports + result.udp_ports,
             "raw_output": result.raw_output,
@@ -258,7 +267,7 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
             "total_udp_ports": len(result.udp_ports)
         }
         
-        # 保存到数据库
+        # Save to database
         if save_to_db and device_id:
             try:
                 from .scan_results import create_scan_result_internal, update_or_create_scan_result
@@ -275,10 +284,10 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
                     status="success"
                 )
                 
-                # 使用更新或创建函数，确保一个设备只有一个扫描结果
+                # Use update or create function to ensure only one scan result per device
                 update_or_create_scan_result(scan_result_data, db)
             except Exception as e:
-                # 如果保存失败，记录错误但不影响扫描结果返回
+                # If saving fails, log the error but do not affect the scan result return
                 print(f"Warning: Failed to save scan result to database: {e}")
         
         return scan_result
@@ -289,27 +298,34 @@ async def port_scan_device(ip: str, ports: str = None, fast_scan: bool = True, s
         raise HTTPException(status_code=500, detail=f"Port scan failed: {str(e)}")
 
 @router.get("/{ip}/oscan")
-async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = True, save_to_db: bool = True, db: Session = Depends(get_db)):
-    """执行OS指纹识别
-    
+async def os_scan_device(
+    ip: str,
+    ports: str = "22,80,443",
+    fast_scan: bool = True,
+    save_to_db: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Perform OS fingerprinting scan.
+
     Args:
-        ip: 目标IP地址
-        ports: 用于OS指纹识别的端口（默认：22,80,443）
-        fast_scan: 是否使用快速扫描模式
-        save_to_db: 是否保存结果到数据库
-        db: 数据库会话
-        
+        ip: Target IP address.
+        ports: Ports used for OS fingerprinting (default: 22,80,443).
+        fast_scan: Whether to use fast scan mode.
+        save_to_db: Whether to save the result to the database.
+        db: Database session.
+
     Returns:
-        Dict: OS扫描结果
+        Dict: OS scan result.
     """
     try:
-        # 验证IP地址格式
+        # Validate IP address format
         ipaddress.ip_address(ip)
         
-        # 查找对应的设备
+        # Find the corresponding device
         device = db.query(Device).filter(Device.ip_address == ip).first()
         
-        # 如果设备不存在，创建一个临时设备记录
+        # If the device does not exist, create a temporary device record
         if not device:
             device = Device(
                 ip_address=ip,
@@ -323,10 +339,10 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
         
         device_id = device.id if device else None
         
-        # 创建扫描引擎
+        # Create scan engine
         scan_engine = ScanEngine()
         
-        # 执行OS扫描
+        # Perform OS scan
         result = await scan_engine.scan_single_device(
             target_ip=ip,
             device_name=f"Device {ip}",
@@ -337,7 +353,7 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
         if result.error:
             raise HTTPException(status_code=500, detail=f"OS scan failed: {result.error}")
         
-        # 准备返回结果
+        # Prepare return result
         scan_result = {
             "os_guesses": result.os_info.get("os_guesses", []),
             "os_details": result.os_info.get("os_details", {}),
@@ -352,7 +368,7 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
             "scan_duration": result.scan_duration
         }
         
-        # 保存到数据库
+        # Save to database
         if save_to_db and device_id:
             try:
                 from .scan_results import create_scan_result_internal, update_or_create_scan_result
@@ -370,14 +386,14 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
                     status="success"
                 )
                 
-                # 使用更新或创建函数，确保一个设备只有一个扫描结果
+                # Use update or create function to ensure only one scan result per device
                 update_or_create_scan_result(scan_result_data, db)
                 
                 # Update device information from scan results
                 if result.os_info:
                     update_device_from_scan_results(device_id, result.os_info, db)
             except Exception as e:
-                # 如果保存失败，记录错误但不影响扫描结果返回
+                # If saving fails, log the error but do not affect the scan result return
                 print(f"Warning: Failed to save scan result to database: {e}")
         
         return scan_result
@@ -390,7 +406,7 @@ async def os_scan_device(ip: str, ports: str = "22,80,443", fast_scan: bool = Tr
 def update_device_from_scan_results(device_id: int, scan_info: dict, db: Session):
     """
     Update device information from scan results
-    
+
     Args:
         device_id: Device ID
         scan_info: Scan information dictionary

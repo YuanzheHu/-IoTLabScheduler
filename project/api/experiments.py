@@ -39,13 +39,13 @@ def create_experiment(exp: ExperimentCreate, db: Session = Depends(get_db)):
     """
     from core.network_utils import NetworkUtils
     
-    # 动态检测可用的网络接口
+    # Dynamically detect available network interface
     default_interface = NetworkUtils.get_default_interface()
     if not default_interface:
-        logger.warning("未找到可用的网络接口，使用 'any' 作为备选")
+        logger.warning("No available network interface found, using 'any' as fallback")
         default_interface = "any"
     
-    logger.info(f"使用网络接口: {default_interface}")
+    logger.info(f"Using network interface: {default_interface}")
     
     # 1. Write experiment record with status 'pending'
     db_exp = Experiment(
@@ -71,10 +71,10 @@ def create_experiment(exp: ExperimentCreate, db: Session = Depends(get_db)):
         target_ip=exp.target_ip,
         port=exp.port or 55443,
         duration=exp.duration_sec or 60,
-        interface=default_interface  # 使用动态检测的接口
+        interface=default_interface  # Use dynamically detected interface
     )
 
-    # 手动构建返回字典，确保Pydantic可以正确序列化
+    # Manually construct return dict to ensure Pydantic serialization
     return {
         "id": db_exp.id,
         "name": db_exp.name,
@@ -107,7 +107,7 @@ def create_experiment_v2(exp: ExperimentCreateV2, db: Session = Depends(get_db))
     Returns:
         ExperimentReadV2: The created V2 experiment object
     """
-    logger.info(f"创建V2实验: {exp.name}, 攻击模式: {exp.attack_mode}, 循环次数: {exp.cycles}")
+    logger.info(f"Create V2 experiment: {exp.name}, attack mode: {exp.attack_mode}, cycles: {exp.cycles}")
     
     # 1. Write experiment record with V2 fields
     db_exp = Experiment(
@@ -151,7 +151,7 @@ def create_experiment_v2(exp: ExperimentCreateV2, db: Session = Depends(get_db))
             experiment_id=db_exp.id,
             attack_config_dict=attack_config
         )
-        logger.info(f"启动循环攻击实验 {db_exp.id}，使用V2引擎")
+        logger.info(f"Start cyclic attack experiment {db_exp.id} using V2 engine")
     else:
         # Use V1 attack engine for single mode
         run_attack_experiment.delay(
@@ -162,7 +162,7 @@ def create_experiment_v2(exp: ExperimentCreateV2, db: Session = Depends(get_db))
             duration=exp.duration_sec or 60,
             interface=exp.interface
         )
-        logger.info(f"启动单次攻击实验 {db_exp.id}，使用V1引擎")
+        logger.info(f"Start single attack experiment {db_exp.id} using V1 engine")
 
     # 4. Return V2 experiment object
     return {
@@ -234,7 +234,7 @@ def get_experiment(experiment_id: int, db: Session = Depends(get_db)):
     if not exp:
         raise HTTPException(status_code=404, detail="Experiment not found")
     
-    # 手动构建返回字典，确保Pydantic可以正确序列化
+    # Manually construct return dict to ensure Pydantic serialization
     return {
         "id": exp.id,
         "name": exp.name,
@@ -326,7 +326,7 @@ def stop_experiment(experiment_id: int, db: Session = Depends(get_db)):
     # Trigger Celery task to stop the attack
     stop_attack_experiment.delay(experiment_id)
     
-    # 手动构建返回字典，确保Pydantic可以正确序列化
+    # Manually construct return dict to ensure Pydantic serialization
     return {
         "id": exp.id,
         "name": exp.name,
@@ -397,7 +397,7 @@ def traffic_capture(
         interface=interface
     )
 
-    # 手动构建返回字典，确保Pydantic可以正确序列化
+    # Manually construct return dict to ensure Pydantic serialization
     return {
         "id": exp.id,
         "name": exp.name,
@@ -411,4 +411,3 @@ def traffic_capture(
         "result": exp.result,
         "capture_id": exp.capture_id
     }
-
